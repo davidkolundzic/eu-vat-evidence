@@ -1,0 +1,34 @@
+﻿@page "/transactions/{id:guid}/verify"
+@model VatEvidence.Web.Pages.Transactions.VerifyModel
+
+@{
+}
+<h1>Evidences chain Verification</h1>
+
+<div class="mb-3">
+  <div><strong>Transaction:</strong> @Model.Result.TransactionId</div>
+  <div><strong>Valid:</strong> @(Model.Result.IsValid ? "YES" : "NO")</div>
+  <div><strong>Records checked:</strong> @Model.Result.RecordsChecked</div>
+  <div><strong>Head hash:</strong> <code>@Model.Result.HeadHash</code></div>
+  <div><strong>Tail hash:</strong> <code>@Model.Result.TailHash</code></div>
+</div>
+@if(!Model.Result.IsValid)
+{
+  <div class="alert alert-danger">
+    <strong>Issues found:</strong> 
+    <ul>
+      @foreach(var issue in Model.Result.Issues)
+      {
+        <li>
+          <code>@issue.Kind</code> — Evidence <code>@issue.EvidenceId</code>
+          <div class="small">Expected: <code>@issue.Expected</code></div>
+          <div class="small">Actual: <code>@issue.Actual</code></div>
+        </li>
+      }
+    </ul>
+  </div>
+}else{
+  <div class="alert alert-success">
+    Evidence chain is valid.
+  </div>
+}

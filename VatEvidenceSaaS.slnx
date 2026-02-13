@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/docs/">
+    <File Path="DEV-WEBHOOK-CHEAT-SHEET.md" />
+    <File Path="docs/MIGRATION-GUIDE.md" />
+    <File Path="docs/PATCH-APPLIED-SUMMARY.md" />
+    <File Path="docs/TEST-SCENARIOS.md" />
+    <File Path="docs/WEBHOOK_INTEGRATION.md" />
+    <File Path="shell-commands.md" />
+  </Folder>
+  <Project Path="VatEvidence.Application/VatEvidence.Application.csproj" />
+  <Project Path="VatEvidence.Domain/VatEvidence.Domain.csproj" />
+  <Project Path="VatEvidence.Infrastructure/VatEvidence.Infrastructure.csproj" />
+  <Project Path="VatEvidence.Test.Integration/VatEvidence.Test.Integration.csproj" Id="ea7a8b86-eab8-4aef-b10f-191b047ba9b0" />
+  <Project Path="VatEvidence.Test.Unit/VatEvidence.Test.Unit.csproj" Id="6b77aa7b-27cc-406d-823c-428239dd6268" />
+  <Project Path="VatEvidence.Web/VatEvidence.Web.csproj" />
+</Solution>

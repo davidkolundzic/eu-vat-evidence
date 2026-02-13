@@ -1,0 +1,14 @@
+{
+  "help": "https://learn.microsoft.com/en-us/visualstudio/ide/file-nesting-solution-explorer",
+  "dependentFileProviders": {
+    "add": {
+      "pathSegment": {
+        "add": {
+          ".*": [
+            ".I$(capturedFileName).cs"
+          ]
+        }
+      }
+    }
+  }
+}
