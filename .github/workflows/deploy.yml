@@ -1,0 +1,24 @@
+name: Deploy to Render
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Trigger Render deployment
+        run: |
+          echo "Render će automatski deployati preko GitHub integracije"
+          echo "Ovo je placeholder za dodatne pre-deploy checks ako želiš"
+
+      - name: Notify deployment
+        run: |
+          echo "Deployment triggered for branch: ${{ github.ref_name }}"

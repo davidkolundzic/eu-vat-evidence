@@ -1,0 +1,30 @@
+services:
+  # Web service
+  - type: web
+    name: vatevidence-web
+    runtime: docker
+    region: frankfurt # ili oregon, singapore...
+    plan: starter # free tier, ili standard/pro
+    branch: main # ili develop - odredi koji branch
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ConnectionStrings__Default
+        fromDatabase:
+          name: vatevidence-db
+          property: connectionString
+      - key: ASPNETCORE_URLS
+        value: http://+:8080
+    healthCheckPath: /health
+    autoDeploy: true
+
+  # PostgreSQL database
+  - type: pserv
+    name: vatevidence-db
+    runtime: postgresql
+    plan: starter # free tier
+    region: frankfurt # ista region kao web service
+    databaseName: vatevidence
+    databaseUser: vatevidence_user
+    ipAllowList: [] # prazno = allow from Render services only
