@@ -5,7 +5,9 @@ namespace VatEvidence.Web.Controllers;
 
 [ApiController]
 [Route("api/health")]
-public sealed class HealthController(AppDbContext _dbContext ) : ControllerBase
+public sealed class HealthController(
+  AppDbContext _dbContext,
+  IWebHostEnvironment _env) : ControllerBase
 {
 
     
@@ -15,6 +17,12 @@ public sealed class HealthController(AppDbContext _dbContext ) : ControllerBase
     {
         return Ok(new { status = "healthy", timestamp = DateTimeOffset.UtcNow });
     }
+
+  [HttpGet]
+  public IActionResult Info()
+  {
+    return Ok( new { environment = _env.EnvironmentName });
+  }
 
   [HttpGet("db")]
   public async Task<IActionResult> TestDb()
