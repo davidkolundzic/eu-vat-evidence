@@ -31,12 +31,23 @@ public sealed class HealthController(
 
     var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString();
     var commit = _config["GIT_COMMIT_SHA"];
+    if (_env.IsDevelopment()) {
+      return Ok(new {});
+    }
+    else
+    {
+      return Ok(new
+      {
+        status = dbOk ? "OK" : "DEGRADED",
+        environment = _env.EnvironmentName,
+        database = dbOk ? "Connected" : "Failed",
+        timestamp = DateTimeOffset.UtcNow,
+        varsion = "1.0.0.0",
+        commit,
 
-    return Ok(new 
-    { 
-      status = "healthy", 
-      timestamp = DateTimeOffset.UtcNow 
-    });
+      });
+    }
+    
   }
 
   [HttpGet("info")]
