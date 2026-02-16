@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
 using System.Reflection;
 using VatEvidence.Infrastructure.Persistence;
 
@@ -11,6 +13,9 @@ public sealed class HealthController(
   IWebHostEnvironment _env,
   IConfiguration _config) : ControllerBase
 {
+  private static readonly DateTimeOffset _startTime = DateTimeOffset.UtcNow;
+  private static DateTimeOffset? _lastHealthyTime = DateTimeOffset.UtcNow;
+  private static DateTimeOffset? _downtimeStart = null;
 
 
 
@@ -18,20 +23,46 @@ public sealed class HealthController(
   public async Task<IActionResult> Get()
   {
     bool dbOk;
+    string? dbProvider = null;
+    List<string>? appliedMigrations = null;
 
     try
     {
       dbOk = await _dbContext.Database.CanConnectAsync();
+
+      if (dbOk)
+      {
+        dbProvider = _dbContext.Database.ProviderName;
+        appliedMigrations = (await _dbContext.Database.GetAppliedMigrationsAsync()).ToList();
+      }
     }
     catch (Exception)
     {
-
       dbOk = false;
     }
 
     var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString();
     var commit = _config["GIT_COMMIT_SHA"];
-    if (_env.IsDevelopment()) {
+    var uptime = DateTimeOffset.UtcNow - _startTime;
+
+    // Track downtime
+    TimeSpan? currentDowntime = null;
+    if (dbOk)
+    {
+      _lastHealthyTime = DateTimeOffset.UtcNow;
+      _downtimeStart = null;
+    }
+    else
+    {
+      if (_downtimeStart == null)
+      {
+        _downtimeStart = DateTimeOffset.UtcNow;
+      }
+      currentDowntime = DateTimeOffset.UtcNow - _downtimeStart.Value;
+    }
+
+    if (_env.IsDevelopment())
+    {
       return Ok(new {});
     }
     else
@@ -39,15 +70,44 @@ public sealed class HealthController(
       return Ok(new
       {
         status = dbOk ? "OK" : "DEGRADED",
+        isHealthy = dbOk,
         environment = _env.EnvironmentName,
         database = dbOk ? "Connected" : "Failed",
+        databaseProvider = dbProvider ?? "Unknown",
+        migrationsApplied = appliedMigrations?.Count ?? 0,
+        migrations = appliedMigrations,
+        uptime = new 
+        {
+          days = uptime.Days,
+          hours = uptime.Hours,
+          minutes = uptime.Minutes,
+          seconds = uptime.Seconds,
+          totalSeconds = (int)uptime.TotalSeconds
+        },
+        downtime = dbOk ? (object)new
+        {
+          isDown = false,
+          since = (DateTimeOffset?)null,
+          duration = (object?)null
+        } : new
+        {
+          isDown = true,
+          since = _downtimeStart,
+          duration = new
+          {
+            days = currentDowntime!.Value.Days,
+            hours = currentDowntime.Value.Hours,
+            minutes = currentDowntime.Value.Minutes,
+            seconds = currentDowntime.Value.Seconds,
+            totalSeconds = (int)currentDowntime.Value.TotalSeconds
+          }
+        },
+        lastHealthyCheck = _lastHealthyTime,
         timestamp = DateTimeOffset.UtcNow,
-        varsion = "1.0.0.0",
-        commit,
-
+        version = version ?? "1.0.0.0",
+        commit
       });
     }
-    
   }
 
   [HttpGet("info")]

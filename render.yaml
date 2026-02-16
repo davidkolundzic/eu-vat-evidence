@@ -19,10 +19,9 @@ services:
     healthCheckPath: /health
     autoDeploy: true
 
+  databases:
   # PostgreSQL database
-  - type: pserv
-    name: vatevidence-db
-    runtime: postgresql
+  - name: vatevidence-db
     plan: starter # free tier
     region: frankfurt # ista region kao web service
     databaseName: vatevidence
