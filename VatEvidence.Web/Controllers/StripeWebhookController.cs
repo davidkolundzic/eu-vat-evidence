@@ -79,7 +79,17 @@ public sealed class StripeWebhookController(
 
     // 6) Parse event
     var stripeEvent = Stripe.EventUtility.ParseEvent(payload, throwOnApiVersionMismatch: false);
-    
+
+    string? ipCountryHint = null;
+    if (Request.Headers.TryGetValue("CF-IPCountry", out var ipCountry) && !string.IsNullOrWhiteSpace(ipCountry))
+    {
+      ipCountryHint = ipCountry.ToString();
+    }
+    if (string.IsNullOrWhiteSpace(ipCountryHint) &&
+      Request.Headers.TryGetValue("X-IP-Country", out var xip) && !string.IsNullOrWhiteSpace(xip))
+    {
+      ipCountryHint = xip.ToString();
+    }
     // 7) Process webhook
     var command = new ProcessWebhookCommand(
       WorkspaceId: workspaceId,
@@ -88,7 +98,8 @@ public sealed class StripeWebhookController(
       EventId: stripeEvent.Id,
       EventType: stripeEvent.Type,
       CreatedUtc: stripeEvent.Created,
-      PayloadJson: payload
+      PayloadJson: payload,
+      IpCountryHint: ipCountryHint
     );
 
     var result = await _webhookProcessor.ProcessAsync(command);

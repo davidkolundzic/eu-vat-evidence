@@ -70,7 +70,7 @@ namespace VatEvidence.Test.Integration.Webhooks
       var badHeader = $"t={timestamp},v1=deadbeef"; // namjerno krivo
 
       var req = new HttpRequestMessage(HttpMethod.Post,
-  $"/api/webhooks/stripe/test?workspace_id={TestGuids.WorkspaceId}");
+  $"/api/webhooks/stripe/test?workspace_id={ws.Id}"); // ✅ Fixed: Use actual workspace ID
       req.Content = new StringContent(payload, Encoding.UTF8, "application/json");
       req.Headers.TryAddWithoutValidation("Stripe-Signature", badHeader);
 
@@ -109,14 +109,14 @@ namespace VatEvidence.Test.Integration.Webhooks
 
       await db.SaveChangesAsync();
 
-      var payload = """{"id":"evt_test_002","object":"event","api_version":"2022-11-15","created":1700000001,"data":{"object":{"id":"pi_test_002","object":"payment_intent","amount":2999,"amount_capturable":0,"amount_received":2999,"application":null,"application_fee_amount":null,"canceled_at":null,"cancellation_reason":null,"capture_method":"automatic","client_secret":null,"confirmation_method":"automatic","created":1700000001,"currency":"eur","customer":null,"description":null,"invoice":null,"last_payment_error":null,"livemode":false,"metadata":{},"next_action":null,"on_behalf_of":null,"payment_method":null,"payment_method_options":{},"payment_method_types":["card"],"receipt_email":"customer@example.com","review":null,"setup_future_usage":null,"shipping":null,"source":null,"statement_descriptor":null,"statement_descriptor_suffix":null,"status":"succeeded","transfer_data":null,"transfer_group":null}},"livemode":false,"pending_webhooks":1,"request":{"id":null,"idempotency_key":null},"type":"payment_intent.succeeded"}""";
+      var payload = """{"id":"evt_test_002","object":"event","api_version":"2022-11-15","created":1700000001,"data":{"object":{"id":"pi_test_002","object":"payment_intent","amount":2999,"amount_capturable":0,"amount_received":2999,"application":null,"application_fee_amount":null,"canceled_at":null,"cancellation_reason":null,"capture_method":"automatic","client_secret":null,"confirmation_method":"automatic","created":1700000001,"currency":"eur","customer":null,"description":null,"invoice":null,"last_payment_error":null,"livemode":false,"metadata":{"ip_country":"HR"},"next_action":null,"on_behalf_of":null,"payment_method":null,"payment_method_options":{},"payment_method_types":["card"],"receipt_email":"customer@example.com","review":null,"setup_future_usage":null,"shipping":null,"source":null,"statement_descriptor":null,"statement_descriptor_suffix":null,"status":"succeeded","transfer_data":null,"transfer_group":null,"billing_details":{"address":{"country":"HR"}}}},"livemode":false,"pending_webhooks":1,"request":{"id":null,"idempotency_key":null},"type":"payment_intent.succeeded"}""";
 
       var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
       var signature = StripeTestHelpers.CreateStripeSignatureHeader(payload, secret, timestamp);
 
       var req = new HttpRequestMessage(
         HttpMethod.Post,
-        $"/api/webhooks/stripe/test?workspace_id={TestGuids.WorkspaceId}"
+        $"/api/webhooks/stripe/test?workspace_id={ws.Id}" // ✅ Koristi stvarni workspace ID
         );
 
       req.Content = new StringContent(payload, Encoding.UTF8, "application/json");
@@ -153,7 +153,47 @@ namespace VatEvidence.Test.Integration.Webhooks
 
       await db.SaveChangesAsync();
 
-      var payload = """{"id":"evt_test_003","object":"event","api_version":"2022-11-15","created":1700000002,"data":{"object":{"id":"pi_test_003","object":"payment_intent","amount":2999,"amount_capturable":0,"amount_received":2999,"application":null,"application_fee_amount":null,"canceled_at":null,"cancellation_reason":null,"capture_method":"automatic","client_secret":null,"confirmation_method":"automatic","created":1700000002,"currency":"eur","customer":null,"description":null,"invoice":null,"last_payment_error":null,"livemode":false,"metadata":{},"next_action":null,"on_behalf_of":null,"payment_method":null,"payment_method_options":{},"payment_method_types":["card"],"receipt_email":"customer@example.com","review":null,"setup_future_usage":null,"shipping":null,"source":null,"statement_descriptor":null,"statement_descriptor_suffix":null,"status":"succeeded","transfer_data":null,"transfer_group":null}},"livemode":false,"pending_webhooks":1,"request":{"id":null,"idempotency_key":null},"type":"payment_intent.succeeded"}""";
+      var payload = """
+{
+  "id": "evt_test_003",
+  "object": "event",
+  "api_version": "2022-11-15",
+  "created": 1700000002,
+  "data": {
+    "object": {
+      "id": "pi_test_003",
+      "object": "payment_intent",
+      "amount": 2999,
+      "amount_capturable": 0,
+      "amount_received": 2999,
+      "created": 1700000002,
+      "currency": "eur",
+      "status": "succeeded",
+      "receipt_email": "customer@example.com",
+      "metadata": {
+        "ip_country": "FR"
+      },
+      "billing_details": {
+        "address": {
+          "country": "FR",
+          "city": "Paris",
+          "line1": "Test Avenue 1",
+          "postal_code": "75001"
+        },
+        "email": "customer@example.com",
+        "name": "Test Customer"
+      }
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 1,
+  "request": {
+    "id": null,
+    "idempotency_key": null
+  },
+  "type": "payment_intent.succeeded"
+}
+""";
 
       async Task<HttpStatusCode> SendOnce()
       {
@@ -161,7 +201,7 @@ namespace VatEvidence.Test.Integration.Webhooks
         var sig = StripeTestHelpers.CreateStripeSignatureHeader(payload, secret, ts);
 
         var req = new HttpRequestMessage(HttpMethod.Post,
-          $"/api/webhooks/stripe/test?workspace_id={TestGuids.WorkspaceId}");
+          $"/api/webhooks/stripe/test?workspace_id={ws.Id}"); // ✅ Koristi stvarni workspace ID
         req.Content = new StringContent(payload, Encoding.UTF8, "application/json");
         req.Headers.TryAddWithoutValidation("Stripe-Signature", sig);
 

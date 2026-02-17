@@ -25,6 +25,7 @@ public sealed class HealthController(
     bool dbOk;
     string? dbProvider = null;
     List<string>? appliedMigrations = null;
+    List<string>? pendingMigrations = null;
 
     try
     {
@@ -34,6 +35,7 @@ public sealed class HealthController(
       {
         dbProvider = _dbContext.Database.ProviderName;
         appliedMigrations = (await _dbContext.Database.GetAppliedMigrationsAsync()).ToList();
+        pendingMigrations = (await _dbContext.Database.GetPendingMigrationsAsync()).ToList();
       }
     }
     catch (Exception)
@@ -76,6 +78,8 @@ public sealed class HealthController(
         databaseProvider = dbProvider ?? "Unknown",
         migrationsApplied = appliedMigrations?.Count ?? 0,
         migrations = appliedMigrations,
+        pendingMigrations = pendingMigrations?.Count ?? 0,
+        pendingMigrationsList = pendingMigrations,
         uptime = new 
         {
           days = uptime.Days,

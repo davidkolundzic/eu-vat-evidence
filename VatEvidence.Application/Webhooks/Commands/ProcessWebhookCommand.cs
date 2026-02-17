@@ -7,5 +7,6 @@ public sealed record ProcessWebhookCommand(
   string EventId,       // "evt_..."
   string EventType,     // "payment_intent.succeeded"
   DateTimeOffset CreatedUtc,
-  string PayloadJson    // Raw JSON string
+  string PayloadJson,    // Raw JSON string
+  string? IpCountryHint = null
 );

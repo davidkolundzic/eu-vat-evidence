@@ -41,6 +41,25 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
+// Auto-run migrations on startup (for Render staging/production)
+if (!app.Environment.IsDevelopment())
+{
+    using (var scope = app.Services.CreateScope())
+    {
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        try
+        {
+            dbContext.Database.Migrate();
+            app.Logger.LogInformation("Migracije baze podataka uspešno primenjene.");
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Greška pri primeni migracija baze podataka.");
+            throw; // Stop startup if migrations fail
+        }
+    }
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {

@@ -38,7 +38,8 @@ public sealed class StripeWebhookProcessor(
           cmd.Mode,
           providerEvent.ProviderEventId,
           providerEvent.ReceivedUtc,
-          cmd.PayloadJson, 
+          cmd.PayloadJson,
+          cmd.IpCountryHint,
           ct);
       }
       else
@@ -119,7 +120,14 @@ public sealed class StripeWebhookProcessor(
     }
   }
 
-  private async Task ProcessPaymentIntentSucceededAsync(Guid workspaceId, string mode, string providerEventId, DateTimeOffset receivedUtc, string payloadJson, CancellationToken ct)
+  private async Task ProcessPaymentIntentSucceededAsync(
+    Guid workspaceId, 
+    string mode, 
+    string providerEventId, 
+    DateTimeOffset receivedUtc, 
+    string payloadJson,
+    string? ipCountryHint,
+    CancellationToken ct)
   {
     var doc = JsonDocument.Parse(payloadJson);
     var dataObj = doc.RootElement.GetProperty("data").GetProperty("object");
@@ -130,6 +138,9 @@ public sealed class StripeWebhookProcessor(
     var currency = dataObj.GetProperty("currency").GetString()?.ToUpperInvariant() ?? "EUR";
     var created = dataObj.GetProperty("created").GetInt64();
     var createdUtc = DateTimeOffset.FromUnixTimeSeconds(created);
+
+   
+
 
     // Extract charge ID (if available)
     string? chargeId = null;
@@ -143,6 +154,20 @@ public sealed class StripeWebhookProcessor(
     if (dataObj.TryGetProperty("receipt_email", out var emailElement) && emailElement.ValueKind == JsonValueKind.String)
     {
       customerEmail = emailElement.GetString();
+    }
+
+    // Extract billing country from billing_details
+    var billingCountry = ExtractBillingCountry(dataObj);
+    if (string.IsNullOrWhiteSpace(billingCountry))
+    {
+      _logger.LogWarning("No billing country found in payment_intent {PaymentIntentId}", piId);
+    }
+
+    // Extract IP country from hint, metadata, or charges
+    var ipCountry = ExtractIpCountry(dataObj, payloadJson, ipCountryHint);
+    if (string.IsNullOrWhiteSpace(ipCountry))
+    {
+      _logger.LogWarning("No IP country found in payment_intent {PaymentIntentId}", piId);
     }
 
     // Wrap entire flow in transaction for FOR UPDATE lock to work correctly
@@ -187,29 +212,37 @@ public sealed class StripeWebhookProcessor(
       if (transaction.CustomerEmail is null && customerEmail is not null) transaction.CustomerEmail = customerEmail;
     }
 
-    // 2) Append billing evidence (idempotentno po tx+type+source_ref + FOR UPDATE)
-    await _evidenceAppendService.AppendAsync(
-      new AppendEvidenceCommand(
-        TransactionId: transaction.Id,
-        EvidenceType: EvidenceType.Billingcountry,
-        CountryCode: "US",
-        SourceRef: providerEventId,
-        CapturedUtc: receivedUtc
-      ),
-      ct);
-    await _db.SaveChangesAsync(ct); // save evidence before appending next
+    // 2) Append billing evidence (only if available)
+    if (!string.IsNullOrWhiteSpace(billingCountry))
+    {
+      await _evidenceAppendService.AppendAsync(
+        new AppendEvidenceCommand(
+          TransactionId: transaction.Id,
+          EvidenceType: EvidenceType.Billingcountry,
+          CountryCode: billingCountry,
+          SourceRef: $"{providerEventId}:billing",
+          CapturedUtc: receivedUtc
+        ),
+        ct);
+      await _db.SaveChangesAsync(ct);
+      _logger.LogInformation("Appended billing country evidence {Country} for transaction {TransactionId}", billingCountry, transaction.Id);
+    }
 
-    // 3) Append IP evidence
-    await _evidenceAppendService.AppendAsync(
-      new AppendEvidenceCommand(
-        TransactionId: transaction.Id,
-        EvidenceType: EvidenceType.Ipcountry,
-        CountryCode: "US",
-        SourceRef: providerEventId,
-        CapturedUtc: receivedUtc
-      ),
-      ct);
-    await _db.SaveChangesAsync(ct); // save evidence before status evaluation
+    // 3) Append IP evidence (only if available)
+    if (!string.IsNullOrWhiteSpace(ipCountry))
+    {
+      await _evidenceAppendService.AppendAsync(
+        new AppendEvidenceCommand(
+          TransactionId: transaction.Id,
+          EvidenceType: EvidenceType.Ipcountry,
+          CountryCode: ipCountry,
+          SourceRef: $"{providerEventId}:ip",
+          CapturedUtc: receivedUtc
+        ),
+        ct);
+      await _db.SaveChangesAsync(ct);
+      _logger.LogInformation("Appended IP country evidence {Country} for transaction {TransactionId}", ipCountry, transaction.Id);
+    }
 
     // 4) Evaluate status from current evidence snapshot (robust vs out-of-order/retry)
     var (status, reason) = await EvaluateStatusAsync(transaction.Id, ct);
@@ -272,5 +305,120 @@ public sealed class StripeWebhookProcessor(
     }
 
     return false;
+  }
+
+  private static string? ExtractBillingCountry(JsonElement dataObj)
+  {
+    // Try billing_details.address.country (most common for PaymentIntent)
+    if (dataObj.TryGetProperty("billing_details", out var billingDetails) &&
+        billingDetails.ValueKind == JsonValueKind.Object &&
+        billingDetails.TryGetProperty("address", out var address) &&
+        address.ValueKind == JsonValueKind.Object &&
+        address.TryGetProperty("country", out var country) &&
+        country.ValueKind == JsonValueKind.String)
+    {
+      var countryCode = country.GetString()?.Trim().ToUpperInvariant();
+      if (IsValidCountryCode(countryCode))
+      {
+        return countryCode;
+      }
+    }
+
+    // Fallback: try metadata.billing_country
+    if (dataObj.TryGetProperty("metadata", out var meta) &&
+        meta.ValueKind == JsonValueKind.Object &&
+        meta.TryGetProperty("billing_country", out var metaCountry) &&
+        metaCountry.ValueKind == JsonValueKind.String)
+    {
+      var countryCode = metaCountry.GetString()?.Trim().ToUpperInvariant();
+      if (IsValidCountryCode(countryCode))
+      {
+        return countryCode;
+      }
+    }
+
+    return null;
+  }
+
+  private static string? ExtractIpCountry(JsonElement dataObj, string payloadJson, string? ipCountryHint)
+  {
+    // Option 0: Try ipCountryHint from controller (extracted from X-Forwarded-For or similar)
+    if (!string.IsNullOrWhiteSpace(ipCountryHint))
+    {
+      var hintCode = ipCountryHint.Trim().ToUpperInvariant();
+      if (IsValidCountryCode(hintCode))
+      {
+        return hintCode;
+      }
+    }
+
+    // Option 1: Try metadata.ip_country (if you set it from frontend/Stripe Tax)
+    if (dataObj.TryGetProperty("metadata", out var meta) &&
+        meta.ValueKind == JsonValueKind.Object &&
+        meta.TryGetProperty("ip_country", out var ipCountryMeta) &&
+        ipCountryMeta.ValueKind == JsonValueKind.String)
+    {
+      var countryCode = ipCountryMeta.GetString()?.Trim().ToUpperInvariant();
+      if (IsValidCountryCode(countryCode))
+      {
+        return countryCode;
+      }
+    }
+
+    // Option 2: Try charges[0].billing_details.address.country (fallback for Charges API)
+    if (dataObj.TryGetProperty("charges", out var charges) &&
+        charges.ValueKind == JsonValueKind.Object &&
+        charges.TryGetProperty("data", out var chargesData) &&
+        chargesData.ValueKind == JsonValueKind.Array &&
+        chargesData.GetArrayLength() > 0)
+    {
+      var firstCharge = chargesData[0];
+      if (firstCharge.TryGetProperty("billing_details", out var billingDetails) &&
+          billingDetails.ValueKind == JsonValueKind.Object &&
+          billingDetails.TryGetProperty("address", out var address) &&
+          address.ValueKind == JsonValueKind.Object &&
+          address.TryGetProperty("country", out var country) &&
+          country.ValueKind == JsonValueKind.String)
+      {
+        var countryCode = country.GetString()?.Trim().ToUpperInvariant();
+        if (IsValidCountryCode(countryCode))
+        {
+          return countryCode;
+        }
+      }
+    }
+
+    // Option 3: Parse full JSON to check for Stripe Tax calculated_tax_amounts
+    try
+    {
+      var fullDoc = JsonDocument.Parse(payloadJson);
+      if (fullDoc.RootElement.TryGetProperty("data", out var dataRoot) &&
+          dataRoot.TryGetProperty("object", out var obj) &&
+          obj.TryGetProperty("automatic_tax", out var autoTax) &&
+          autoTax.ValueKind == JsonValueKind.Object &&
+          autoTax.TryGetProperty("location", out var location) &&
+          location.ValueKind == JsonValueKind.Object &&
+          location.TryGetProperty("country", out var taxCountry) &&
+          taxCountry.ValueKind == JsonValueKind.String)
+      {
+        var countryCode = taxCountry.GetString()?.Trim().ToUpperInvariant();
+        if (IsValidCountryCode(countryCode))
+        {
+          return countryCode;
+        }
+      }
+    }
+    catch
+    {
+      // Ignore parse errors
+    }
+
+    return null;
+  }
+
+  private static bool IsValidCountryCode(string? code)
+  {
+    // Simple validation: must be 2-letter uppercase code
+    return code is { Length: 2 } && char.IsLetter(code[0]) && char.IsLetter(code[1]);
   }
 }
