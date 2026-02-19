@@ -11,7 +11,7 @@ using VatEvidence.Domain;
 
 namespace VatEvidence.Application.Webhooks;
 
-public sealed class StripeWebhookProcessor(
+public sealed partial class StripeWebhookProcessor(
   IAppDbContext _db,
   ILogger<StripeWebhookProcessor> _logger,
   IEvidenceAppendService _evidenceAppendService) : IWebhookProcessor
@@ -24,7 +24,7 @@ public sealed class StripeWebhookProcessor(
     // Ako je ve? Processed -> pravi duplicate, možemo odmah završiti
     if (providerEvent.ProcessingStatus == EventProcessingStatus.Processed)
     {
-      _logger.LogInformation("Duplicate event {EventId} already processed, skipping", cmd.EventId);
+      LogDuplicateEvent(cmd.EventId);
       return new WebhookProcessResult(true, providerEvent.Id, "Duplicate event", false);
     }
 
@@ -34,7 +34,18 @@ public sealed class StripeWebhookProcessor(
       if (cmd.EventType == "payment_intent.succeeded")
       {
         await ProcessPaymentIntentSucceededAsync(
-          cmd.WorkspaceId, 
+          cmd.WorkspaceId,
+          cmd.Mode,
+          providerEvent.ProviderEventId,
+          providerEvent.ReceivedUtc,
+          cmd.PayloadJson,
+          cmd.IpCountryHint,
+          ct);
+      }
+      else if (cmd.EventType == "checkout.session.completed")
+      {
+        await ProcessCheckoutSessionCompletedAsync(
+          cmd.WorkspaceId,
           cmd.Mode,
           providerEvent.ProviderEventId,
           providerEvent.ReceivedUtc,
@@ -44,7 +55,7 @@ public sealed class StripeWebhookProcessor(
       }
       else
       {
-        _logger.LogWarning("Unhandled event type: {EventType}", cmd.EventType);
+        LogUnhandledEventType(cmd.EventType);
       }
 
       // Mark as processed
@@ -55,8 +66,8 @@ public sealed class StripeWebhookProcessor(
     }
     catch (Exception ex)
     {
-      _logger.LogError(ex, "Failed to process event {EventId}", cmd.EventId);
-      
+      LogProcessingError(ex, cmd.EventId);
+
       providerEvent.ProcessingStatus = EventProcessingStatus.Failed;
       providerEvent.Error = ex.Message;
       await _db.SaveChangesAsync(ct);
@@ -68,11 +79,11 @@ public sealed class StripeWebhookProcessor(
 
   private async Task<ProviderEvent> SaveOrLoadEventAsync(ProcessWebhookCommand cmd, CancellationToken ct)
   {
-    var providerKind = cmd.Provider.ToLowerInvariant() == "stripe" 
+    var providerKind = string.Equals(cmd.Provider, "stripe", StringComparison.OrdinalIgnoreCase)
       ? ProviderKind.Stripe 
       : throw new ArgumentException($"Unknown provider: {cmd.Provider}");
 
-    var mode = cmd.Mode.ToLowerInvariant() == "test" 
+    var mode = string.Equals(cmd.Mode, "test", StringComparison.OrdinalIgnoreCase)
       ? ProviderMode.Test 
       : ProviderMode.Live;
 
@@ -120,6 +131,150 @@ public sealed class StripeWebhookProcessor(
     }
   }
 
+  private async Task ProcessCheckoutSessionCompletedAsync(
+    Guid workspaceId, 
+    string mode, 
+    string providerEventId, 
+    DateTimeOffset receivedUtc, 
+    string payloadJson,
+    string? ipCountryHint,
+    CancellationToken ct)
+  {
+    var doc = JsonDocument.Parse(payloadJson);
+    var dataObj = doc.RootElement.GetProperty("data").GetProperty("object");
+
+    // Extract session ID
+    var sessionId = dataObj.GetProperty("id").GetString() ?? "";
+
+    // Extract payment_intent ID (required)
+    string? piId = null;
+    if (dataObj.TryGetProperty("payment_intent", out var piElement) && piElement.ValueKind == JsonValueKind.String)
+    {
+      piId = piElement.GetString();
+    }
+
+    if (string.IsNullOrWhiteSpace(piId))
+    {
+      LogCheckoutSessionMissingPaymentIntent(sessionId);
+      return; // Non-retryable: session without payment_intent (e.g., setup mode)
+    }
+
+    // Extract billing country from customer_details.address.country
+    string? billingCountry = null;
+    if (dataObj.TryGetProperty("customer_details", out var customerDetails) &&
+        customerDetails.ValueKind == JsonValueKind.Object &&
+        customerDetails.TryGetProperty("address", out var address) &&
+        address.ValueKind == JsonValueKind.Object &&
+        address.TryGetProperty("country", out var country) &&
+        country.ValueKind == JsonValueKind.String)
+    {
+      var countryCode = country.GetString()?.Trim().ToUpperInvariant();
+      if (IsValidCountryCode(countryCode))
+      {
+        billingCountry = countryCode;
+      }
+    }
+
+    if (string.IsNullOrWhiteSpace(billingCountry))
+    {
+      LogCheckoutSessionMissingBillingCountry(sessionId, piId);
+    }
+
+    // Extract amount_total and currency from session
+    var amountTotal = dataObj.TryGetProperty("amount_total", out var amtElement) && amtElement.ValueKind == JsonValueKind.Number
+      ? amtElement.GetInt64()
+      : 0;
+
+    var currency = dataObj.TryGetProperty("currency", out var curElement) && curElement.ValueKind == JsonValueKind.String
+      ? (curElement.GetString()?.Trim().ToUpperInvariant() ?? "EUR")
+      : "EUR";
+
+    // Extract customer email from customer_details
+    string? customerEmail = null;
+    if (dataObj.TryGetProperty("customer_details", out var custDetails) &&
+        custDetails.ValueKind == JsonValueKind.Object &&
+        custDetails.TryGetProperty("email", out var emailElement) &&
+        emailElement.ValueKind == JsonValueKind.String)
+    {
+      customerEmail = emailElement.GetString();
+    }
+
+    // Extract session created timestamp
+    var createdUtc = dataObj.TryGetProperty("created", out var createdElement) && createdElement.ValueKind == JsonValueKind.Number
+      ? DateTimeOffset.FromUnixTimeSeconds(createdElement.GetInt64())
+      : DateTimeOffset.UtcNow;
+
+    LogCheckoutSessionReceived(sessionId, piId, billingCountry);
+
+    // Wrap entire flow in transaction for FOR UPDATE lock
+    await using var dbTx = await _db.BeginTransactionAsync(ct);
+
+    var txMode = string.Equals(mode, "test", StringComparison.OrdinalIgnoreCase) ? ProviderMode.Test : ProviderMode.Live;
+
+    // 1) Find or create transaction by payment_intent ID
+    var transaction = await _db.Transactions
+      .SingleOrDefaultAsync(x =>
+        x.WorkspaceId == workspaceId &&
+        x.Provider == ProviderKind.Stripe &&
+        x.Mode == txMode &&
+        x.ProviderTransactionId == piId, ct);
+
+    if (transaction is null)
+    {
+      // Create transaction with real data from checkout session
+      transaction = new Transaction
+      {
+        Id = Guid.NewGuid(),
+        WorkspaceId = workspaceId,
+        Provider = ProviderKind.Stripe,
+        Mode = txMode,
+        ProviderTransactionId = piId,
+        ProviderChargeId = null,
+        AmountMinor = amountTotal,
+        Currency = currency,
+        CustomerEmail = customerEmail,
+        CreatedUtc = createdUtc,
+        Status = TransactionStatus.Insufficient,
+        StatusReason = "Awaiting evidence"
+      };
+
+      _db.Transactions.Add(transaction);
+      await _db.SaveChangesAsync(ct);
+      LogTransactionCreated(transaction.Id, piId);
+    }
+    else
+    {
+      // Update transaction with session data if missing (payment_intent.succeeded may not have fired yet)
+      if (transaction.AmountMinor == 0 && amountTotal > 0) transaction.AmountMinor = amountTotal;
+      if (transaction.Currency == "EUR" && currency != "EUR") transaction.Currency = currency;
+      if (transaction.CustomerEmail is null && customerEmail is not null) transaction.CustomerEmail = customerEmail;
+    }
+
+    // 2) Append billing evidence (only if available)
+    if (!string.IsNullOrWhiteSpace(billingCountry))
+    {
+      await _evidenceAppendService.AppendAsync(
+        new AppendEvidenceCommand(
+          TransactionId: transaction.Id,
+          EvidenceType: EvidenceType.Billingcountry,
+          CountryCode: billingCountry,
+          SourceRef: $"{providerEventId}:billing",
+          CapturedUtc: receivedUtc
+        ),
+        ct);
+      await _db.SaveChangesAsync(ct);
+      LogBillingCountryAppended(billingCountry, transaction.Id);
+    }
+
+    // 3) Evaluate status from current evidence snapshot
+    var (status, reason) = await EvaluateStatusAsync(transaction.Id, ct);
+    transaction.Status = status;
+    transaction.StatusReason = reason;
+
+    await _db.SaveChangesAsync(ct);
+    await dbTx.CommitAsync(ct);
+  }
+
   private async Task ProcessPaymentIntentSucceededAsync(
     Guid workspaceId, 
     string mode, 
@@ -139,9 +294,6 @@ public sealed class StripeWebhookProcessor(
     var created = dataObj.GetProperty("created").GetInt64();
     var createdUtc = DateTimeOffset.FromUnixTimeSeconds(created);
 
-   
-
-
     // Extract charge ID (if available)
     string? chargeId = null;
     if (dataObj.TryGetProperty("latest_charge", out var chargeIdElement) && chargeIdElement.ValueKind == JsonValueKind.String)
@@ -160,20 +312,20 @@ public sealed class StripeWebhookProcessor(
     var billingCountry = ExtractBillingCountry(dataObj);
     if (string.IsNullOrWhiteSpace(billingCountry))
     {
-      _logger.LogWarning("No billing country found in payment_intent {PaymentIntentId}", piId);
+      LogNoBillingCountry(piId);
     }
 
     // Extract IP country from hint, metadata, or charges
     var ipCountry = ExtractIpCountry(dataObj, payloadJson, ipCountryHint);
     if (string.IsNullOrWhiteSpace(ipCountry))
     {
-      _logger.LogWarning("No IP country found in payment_intent {PaymentIntentId}", piId);
+      LogNoIpCountry(piId);
     }
 
     // Wrap entire flow in transaction for FOR UPDATE lock to work correctly
     await using var dbTx = await _db.BeginTransactionAsync(ct);
 
-    var txMode = mode.ToLowerInvariant() == "test" ? ProviderMode.Test : ProviderMode.Live;
+    var txMode = string.Equals(mode, "test", StringComparison.OrdinalIgnoreCase) ? ProviderMode.Test : ProviderMode.Live;
 
     // 1) Upsert transaction: ako postoji, koristi postoje?i; ako ne, kreiraj novi
     var transaction = await _db.Transactions
@@ -203,7 +355,7 @@ public sealed class StripeWebhookProcessor(
 
       _db.Transactions.Add(transaction);
       await _db.SaveChangesAsync(ct); // mora postojati u DB radi FOR UPDATE u AppendService
-      _logger.LogInformation("Created transaction {TransactionId} for PI {PaymentIntentId}", transaction.Id, piId);
+      LogTransactionCreated(transaction.Id, piId);
     }
     else
     {
@@ -225,7 +377,7 @@ public sealed class StripeWebhookProcessor(
         ),
         ct);
       await _db.SaveChangesAsync(ct);
-      _logger.LogInformation("Appended billing country evidence {Country} for transaction {TransactionId}", billingCountry, transaction.Id);
+      LogBillingCountryAppended(billingCountry, transaction.Id);
     }
 
     // 3) Append IP evidence (only if available)
@@ -241,7 +393,7 @@ public sealed class StripeWebhookProcessor(
         ),
         ct);
       await _db.SaveChangesAsync(ct);
-      _logger.LogInformation("Appended IP country evidence {Country} for transaction {TransactionId}", ipCountry, transaction.Id);
+      LogIpCountryAppended(ipCountry, transaction.Id);
     }
 
     // 4) Evaluate status from current evidence snapshot (robust vs out-of-order/retry)
@@ -264,20 +416,28 @@ public sealed class StripeWebhookProcessor(
       .Select(g => g.OrderByDescending(x => x.Sequence).First())
       .ToListAsync(ct);
 
-    var billing = latest.SingleOrDefault(x => x.EvidenceType == EvidenceType.Billingcountry)?.CountryCode;
-    var ip = latest.SingleOrDefault(x => x.EvidenceType == EvidenceType.Ipcountry)?.CountryCode;
+    var billingRaw = latest.SingleOrDefault(x => x.EvidenceType == EvidenceType.Billingcountry)?.CountryCode;
+    var ipRaw = latest.SingleOrDefault(x => x.EvidenceType == EvidenceType.Ipcountry)?.CountryCode;
 
-    if (string.IsNullOrWhiteSpace(billing) || string.IsNullOrWhiteSpace(ip))
+    var billingCtx = CountryClassification.Classify(billingRaw);
+    var ipCtx = CountryClassification.Classify(ipRaw);
+
+
+    if (!billingCtx.IsValid || !ipCtx.IsValid)
     {
       return (TransactionStatus.Insufficient, "Missing required evidence (billing/ip)");
     }
 
-    if (!string.Equals(billing, ip, StringComparison.OrdinalIgnoreCase))
+    if (!string.Equals(billingCtx.Code, ipCtx.Code, StringComparison.Ordinal))
     {
-      return (TransactionStatus.Mismatch, $"Evidence mismatch (billing={billing}, ip={ip})");
+      return (TransactionStatus.Mismatch, $"Evidence mismatch (billing={billingCtx.Code}, ip={ipCtx.Code})");
     }
 
-    return (TransactionStatus.Ok, "Evidence OK (billing matches IP)");
+    // (optional) dodatna info u reason:
+     var region = billingCtx.IsEu ? "EU" : "non-EU";
+
+     return (TransactionStatus.Ok, $"Evidence OK {billingCtx.Code}  (billing matches IP) [{region}]");
+
   }
 
   private static string ComputeSha256(string input)

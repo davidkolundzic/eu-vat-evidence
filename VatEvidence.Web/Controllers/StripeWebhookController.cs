@@ -10,7 +10,7 @@ namespace VatEvidence.Web.Controllers;
 [ApiController]
 [Route("api/webhooks/stripe")]
 [EnableRateLimiting("webhook")]
-public sealed class StripeWebhookController(
+public sealed partial class StripeWebhookController(
   IAppDbContext _db,
   IStripeSignatureValidator _signatureValidator,
   IWebhookProcessor _webhookProcessor,
@@ -31,19 +31,25 @@ public sealed class StripeWebhookController(
   private async Task<IActionResult> HandleWebhookAsync(string mode)
   {
     // 1) Read raw body
+    /// Stripe requires the raw body for signature verification, so we can't use [FromBody] or similar model binding
+    /// - We also need to ensure the request body can be read multiple times if needed, so we enable buffering
+    /// - Considering the potential size of webhook payloads, we should set a reasonable limit and handle cases where the payload is too large to prevent abuse and ensure we don't consume excessive memory
+    ///  ! For large payloads, consider streaming processing or offloading to a background service instead of reading the entire payload into memory at once 
+    ///  ! For now, we'll set a limit of 1MB for the payload size, which should be sufficient for most Stripe webhooks. If the payload exceeds this limit, we'll return a 413 Payload Too Large response.
+    ///  ! In production, you might want to implement more robust handling for large payloads, such as streaming the request body or using a background processing system to handle the webhook asynchronously.
     using var reader = new StreamReader(Request.Body);
     var payload = await reader.ReadToEndAsync();
 
     if (string.IsNullOrWhiteSpace(payload))
     {
-      _logger.LogWarning("Empty webhook payload received");
+      LogEmptyPayload();
       return BadRequest("Empty payload");
     }
 
     // 2) Get Stripe signature header
     if (!Request.Headers.TryGetValue("Stripe-Signature", out var signatureHeader) || string.IsNullOrWhiteSpace(signatureHeader))
     {
-      _logger.LogWarning("Missing Stripe-Signature header");
+      LogMissingSignature();
       return BadRequest("Missing signature");
     }
 
@@ -52,7 +58,7 @@ public sealed class StripeWebhookController(
     // For now, let's use query parameter: ?workspace_id=...
     if (!Request.Query.TryGetValue("workspace_id", out var workspaceIdStr) || !Guid.TryParse(workspaceIdStr, out var workspaceId))
     {
-      _logger.LogWarning("Missing or invalid workspace_id query parameter");
+      LogMissingWorkspaceId();
       return BadRequest("Missing workspace_id");
     }
 
@@ -66,14 +72,14 @@ public sealed class StripeWebhookController(
 
     if (connection == null)
     {
-      _logger.LogWarning("No provider connection found for workspace {WorkspaceId} mode {Mode}", workspaceId, mode);
+      LogNoProviderConnection(workspaceId, mode);
       return NotFound("Provider connection not found");
     }
 
     // 5) Verify signature
     if (!_signatureValidator.Validate(payload, signatureHeader!, connection.WebhookSecret))
     {
-      _logger.LogWarning("Invalid Stripe signature for workspace {WorkspaceId}", workspaceId);
+      LogInvalidSignature(workspaceId);
       return Unauthorized("Invalid signature");
     }
 
@@ -106,20 +112,19 @@ public sealed class StripeWebhookController(
 
     if (result.Success)
     {
-      _logger.LogInformation("Successfully processed webhook {EventId} for workspace {WorkspaceId}", 
-        stripeEvent.Id, workspaceId);
+      LogWebhookProcessed(stripeEvent.Id, workspaceId);
       return Ok(new { processed = true, eventId = stripeEvent.Id });
     }
-    
-    _logger.LogError("Failed to process webhook {EventId}: {Error}", stripeEvent.Id, result.ErrorMessage);
+
+    LogProcessingError(stripeEvent.Id, result.ErrorMessage);
 
     if (result.Retryable)
     {
-      _logger.LogWarning("Retryable error processing webhook {EventId}, Stripe will retry", stripeEvent.Id);
+      LogRetryableError(stripeEvent.Id);
       return StatusCode(500, new { processed = false, error = result.ErrorMessage, retryable = true });
     }
 
-    _logger.LogWarning("Non-retryable error processing webhook {EventId}, no retry needed", stripeEvent.Id);
+    LogNonRetryableError(stripeEvent.Id);
     return Ok(new { processed = false, error = result.ErrorMessage, retryable = false });
   }
 }

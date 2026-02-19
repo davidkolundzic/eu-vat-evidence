@@ -70,13 +70,3 @@ Stripe-Signature: t=1234567890,v1=live_signature_replace_with_real
     }
   }
 }
-
-###
-# NOTE: For real testing, you need:
-# 1. A ProviderConnection record in database:
-#    INSERT INTO provider_connections (id, workspace_id, provider, mode, webhook_secret, created_at)
-#    VALUES (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 1, 1, 'whsec_test_secret', NOW());
-#
-# 2. Valid Stripe signature (use Stripe CLI or compute HMAC-SHA256)
-#
-# 3. For real Stripe events, use: stripe trigger payment_intent.succeeded

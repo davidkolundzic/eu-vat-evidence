@@ -13,12 +13,8 @@ using VatEvidence.Test.Integration.TestInfrastructure.Builders;
 
 namespace VatEvidence.Test.Integration.Evidence
 {
-  public sealed class EvidenceChainTests : IntegrationTestBase, IClassFixture<LocalPostgresFixture>
-  {
-    public EvidenceChainTests(LocalPostgresFixture postgresFixture) : base(postgresFixture)
-    {
-    }
-
+  public sealed class EvidenceChainTests(LocalPostgresFixture postgresFixture) : IntegrationTestBase(postgresFixture), IClassFixture<LocalPostgresFixture>
+  {     
     [Fact]
     public async Task AppendAsync_Twice_ShouldCreate_SequenceAndHashChain()
     {
@@ -48,7 +44,7 @@ namespace VatEvidence.Test.Integration.Evidence
       var ev1 = await append.AppendAsync(new AppendEvidenceCommand(
         TransactionId: tx.Id,
         EvidenceType: EvidenceType.Billingcountry,
-        CountryCode: CountryCodes.DE,
+        CountryCode: "DE",
         SourceRef: "evt_test_chain_1",
         CapturedUtc: DateTimeOffset.UtcNow
       ));
@@ -60,7 +56,7 @@ namespace VatEvidence.Test.Integration.Evidence
       var ev2 = await append.AppendAsync(new AppendEvidenceCommand(
         TransactionId: tx.Id,
         EvidenceType: EvidenceType.Ipcountry,
-        CountryCode: CountryCodes.DE,
+        CountryCode: "DE",
         SourceRef: "evt_test_chain_1",
         CapturedUtc: DateTimeOffset.UtcNow
       ));
@@ -100,7 +96,7 @@ namespace VatEvidence.Test.Integration.Evidence
       var cmd = new AppendEvidenceCommand(
         TransactionId: tx.Id,
         EvidenceType: EvidenceType.Billingcountry,
-        CountryCode: CountryCodes.DE,
+        CountryCode: "DE",
         SourceRef: "evt_test_idempotent_1",
         CapturedUtc: DateTimeOffset.UtcNow
       );

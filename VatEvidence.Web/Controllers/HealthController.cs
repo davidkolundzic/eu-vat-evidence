@@ -34,8 +34,8 @@ public sealed class HealthController(
       if (dbOk)
       {
         dbProvider = _dbContext.Database.ProviderName;
-        appliedMigrations = (await _dbContext.Database.GetAppliedMigrationsAsync()).ToList();
-        pendingMigrations = (await _dbContext.Database.GetPendingMigrationsAsync()).ToList();
+        appliedMigrations = [.. await _dbContext.Database.GetAppliedMigrationsAsync()];
+        pendingMigrations = [.. await _dbContext.Database.GetPendingMigrationsAsync()];
       }
     }
     catch (Exception)
@@ -44,7 +44,13 @@ public sealed class HealthController(
     }
 
     var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString();
-    var commit = _config["GIT_COMMIT_SHA"];
+
+    // Try multiple sources for git commit SHA (support different CI/CD providers)
+    var commit = _config["GIT_COMMIT_SHA"]        // Custom env var
+              ?? _config["RENDER_GIT_COMMIT"]     // Render platform
+              ?? _config["GITHUB_SHA"]            // GitHub Actions
+              ?? "unknown";
+
     var uptime = DateTimeOffset.UtcNow - _startTime;
 
     // Track downtime
