@@ -36,4 +36,7 @@ public sealed partial class StripeWebhookProcessor
 
   [LoggerMessage(Level = LogLevel.Warning, Message = "Checkout session {SessionId} (PI: {PaymentIntentId}) missing billing country in customer_details")]
   private partial void LogCheckoutSessionMissingBillingCountry(string sessionId, string paymentIntentId);
+
+  [LoggerMessage(Level = LogLevel.Information, Message = "Duplicate key violation during final commit for event {EventId}, continuing (parallel processing)")]
+  private partial void LogDuplicateDuringFinalCommit(string eventId);
 }

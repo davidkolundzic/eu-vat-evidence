@@ -7,7 +7,9 @@ using VatEvidence.Domain;
 
 namespace VatEvidence.Application.Evidence
 {
-  public sealed class EvidenceAppendService(IAppDbContext _db, IEvidenceHashService _hash) : IEvidenceAppendService
+  public sealed class EvidenceAppendService(
+    IAppDbContext _db, 
+    IEvidenceHashService _hash) : IEvidenceAppendService
   {
     public async Task<EvidenceRecord> AppendAsync(AppendEvidenceCommand command, CancellationToken ct = default)
     {

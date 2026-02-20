@@ -58,9 +58,26 @@ public sealed partial class StripeWebhookProcessor(
         LogUnhandledEventType(cmd.EventType);
       }
 
-      // Mark as processed
-      providerEvent.ProcessingStatus = EventProcessingStatus.Processed;
-      await _db.SaveChangesAsync(ct);
+      // Mark as processed atomi?no sa ExecuteUpdateAsync (bez tracking dependency)
+      try
+      {
+        await _db.ProviderEvents
+          .Where(x => x.Id == providerEvent.Id)
+          .ExecuteUpdateAsync(s => s
+            .SetProperty(p => p.ProcessingStatus, EventProcessingStatus.Processed)
+            .SetProperty(p => p.Error, (string?)null),
+            ct);
+      }
+      catch (Exception ex)
+      {
+        // Log warning if status update fails, but treat webhook processing as successful
+        // (event was processed, only status update failed - rare edge case)
+        _logger.LogWarning(ex, "Failed to update provider_event status to Processed for event {EventId}", cmd.EventId);
+
+        // If failure is retryable (DB timeout, deadlock), re-throw so Stripe retries
+        if (IsRetryable(ex))
+          throw;
+      }
 
       return new WebhookProcessResult(true, providerEvent.Id, null, false);
     }
@@ -68,9 +85,27 @@ public sealed partial class StripeWebhookProcessor(
     {
       LogProcessingError(ex, cmd.EventId);
 
-      providerEvent.ProcessingStatus = EventProcessingStatus.Failed;
-      providerEvent.Error = ex.Message;
-      await _db.SaveChangesAsync(ct);
+      // Mark as failed atomi?no sa ExecuteUpdateAsync
+      try
+      {
+        await _db.ProviderEvents
+          .Where(x => x.Id == providerEvent.Id)
+          .ExecuteUpdateAsync(s => s
+            .SetProperty(p => p.ProcessingStatus, EventProcessingStatus.Failed)
+            .SetProperty(p => p.Error, ex.Message),
+            ct);
+      }
+      catch (Exception ex2)
+      {
+        // Log warning if status update fails, but preserve original exception
+        // (secondary failure during status update should not mask the primary failure)
+        _logger.LogWarning(ex2, "Failed to update provider_event status to Failed for event {EventId}", cmd.EventId);
+
+        // If status update failure is retryable, re-throw ORIGINAL exception (not ex2)
+        // so Stripe retries and we can process again
+        if (IsRetryable(ex2))
+          throw;
+      }
 
       var retryable = IsRetryable(ex);
       return new WebhookProcessResult(false, providerEvent.Id, ex.Message, retryable);
@@ -119,8 +154,9 @@ public sealed partial class StripeWebhookProcessor(
                 "ix_provider_events_workspace_id_provider_mode_provider_event_id",
                 StringComparison.Ordinal))
     {
-      // Duplicate event: u?itaj postoje?i iz DB i vrati ga (ne skipaj ako je Failed/Received)
+      // Duplicate event: u?itaj postoje?i iz DB i vrati ga (bez tracking-a)
       var existing = await _db.ProviderEvents
+        .AsNoTracking()
         .SingleAsync(x =>
           x.WorkspaceId == cmd.WorkspaceId &&
           x.Provider == providerKind &&
@@ -239,8 +275,26 @@ public sealed partial class StripeWebhookProcessor(
       };
 
       _db.Transactions.Add(transaction);
-      await _db.SaveChangesAsync(ct);
-      LogTransactionCreated(transaction.Id, piId);
+
+      try
+      {
+        await _db.SaveChangesAsync(ct);
+        LogTransactionCreated(transaction.Id, piId);
+      }
+      catch (DbUpdateException ex) when (IsTransactionUniqueViolation(ex))
+      {
+        // Parallel webhook created same transaction - load it and refresh missing fields
+        transaction = await _db.Transactions.SingleAsync(x =>
+          x.WorkspaceId == workspaceId &&
+          x.Provider == ProviderKind.Stripe &&
+          x.Mode == txMode &&
+          x.ProviderTransactionId == piId, ct);
+
+        // Refresh missing fields (same logic as else branch)
+        if (transaction.AmountMinor == 0 && amountTotal > 0) transaction.AmountMinor = amountTotal;
+        if (transaction.Currency == "EUR" && currency != "EUR") transaction.Currency = currency;
+        if (transaction.CustomerEmail is null && customerEmail is not null) transaction.CustomerEmail = customerEmail;
+      }
     }
     else
     {
@@ -258,12 +312,21 @@ public sealed partial class StripeWebhookProcessor(
           TransactionId: transaction.Id,
           EvidenceType: EvidenceType.Billingcountry,
           CountryCode: billingCountry,
-          SourceRef: $"{providerEventId}:billing",
+          SourceRef: $"{piId}:billing",
           CapturedUtc: receivedUtc
         ),
         ct);
-      await _db.SaveChangesAsync(ct);
-      LogBillingCountryAppended(billingCountry, transaction.Id);
+
+      try
+      {
+        await _db.SaveChangesAsync(ct);
+        LogBillingCountryAppended(billingCountry, transaction.Id);
+      }
+      catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex))
+      {
+        // Parallel webhook appended same evidence - this is OK (idempotent)
+        _logger.LogInformation("Billing evidence already exists for Transaction={TransactionId}, SourceRef={SourceRef} (parallel webhook)", transaction.Id, $"{piId}:billing");
+      }
     }
 
     // 3) Evaluate status from current evidence snapshot
@@ -354,8 +417,25 @@ public sealed partial class StripeWebhookProcessor(
       };
 
       _db.Transactions.Add(transaction);
-      await _db.SaveChangesAsync(ct); // mora postojati u DB radi FOR UPDATE u AppendService
-      LogTransactionCreated(transaction.Id, piId);
+
+      try
+      {
+        await _db.SaveChangesAsync(ct); // mora postojati u DB radi FOR UPDATE u AppendService
+        LogTransactionCreated(transaction.Id, piId);
+      }
+      catch (DbUpdateException ex) when (IsTransactionUniqueViolation(ex))
+      {
+        // Parallel webhook created same transaction - load it and refresh missing fields
+        transaction = await _db.Transactions.SingleAsync(x =>
+          x.WorkspaceId == workspaceId &&
+          x.Provider == ProviderKind.Stripe &&
+          x.Mode == txMode &&
+          x.ProviderTransactionId == piId, ct);
+
+        // Refresh missing fields (same logic as else branch)
+        if (transaction.ProviderChargeId is null && chargeId is not null) transaction.ProviderChargeId = chargeId;
+        if (transaction.CustomerEmail is null && customerEmail is not null) transaction.CustomerEmail = customerEmail;
+      }
     }
     else
     {
@@ -364,23 +444,9 @@ public sealed partial class StripeWebhookProcessor(
       if (transaction.CustomerEmail is null && customerEmail is not null) transaction.CustomerEmail = customerEmail;
     }
 
-    // 2) Append billing evidence (only if available)
-    if (!string.IsNullOrWhiteSpace(billingCountry))
-    {
-      await _evidenceAppendService.AppendAsync(
-        new AppendEvidenceCommand(
-          TransactionId: transaction.Id,
-          EvidenceType: EvidenceType.Billingcountry,
-          CountryCode: billingCountry,
-          SourceRef: $"{providerEventId}:billing",
-          CapturedUtc: receivedUtc
-        ),
-        ct);
-      await _db.SaveChangesAsync(ct);
-      LogBillingCountryAppended(billingCountry, transaction.Id);
-    }
-
-    // 3) Append IP evidence (only if available)
+    // 2) Append IP evidence (only if available)
+    // Note: Billing evidence comes from checkout.session.completed (primary flow)
+    // This handler only appends IP evidence from payment_intent charges data
     if (!string.IsNullOrWhiteSpace(ipCountry))
     {
       await _evidenceAppendService.AppendAsync(
@@ -388,15 +454,24 @@ public sealed partial class StripeWebhookProcessor(
           TransactionId: transaction.Id,
           EvidenceType: EvidenceType.Ipcountry,
           CountryCode: ipCountry,
-          SourceRef: $"{providerEventId}:ip",
+          SourceRef: $"{piId}:ip",
           CapturedUtc: receivedUtc
         ),
         ct);
-      await _db.SaveChangesAsync(ct);
-      LogIpCountryAppended(ipCountry, transaction.Id);
+
+      try
+      {
+        await _db.SaveChangesAsync(ct);
+        LogIpCountryAppended(ipCountry, transaction.Id);
+      }
+      catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex))
+      {
+        // Parallel webhook appended same evidence - this is OK (idempotent)
+        _logger.LogInformation("IP evidence already exists for Transaction={TransactionId}, SourceRef={SourceRef} (parallel webhook)", transaction.Id, $"{piId}:ip");
+      }
     }
 
-    // 4) Evaluate status from current evidence snapshot (robust vs out-of-order/retry)
+    // 3) Evaluate status from current evidence snapshot (robust vs out-of-order/retry)
     var (status, reason) = await EvaluateStatusAsync(transaction.Id, ct);
     transaction.Status = status;
     transaction.StatusReason = reason;
@@ -574,6 +649,21 @@ public sealed partial class StripeWebhookProcessor(
     }
 
     return null;
+  }
+
+  private static bool IsDuplicateKeyViolation(DbUpdateException ex)
+  {
+    return ex.InnerException is PostgresException pex
+           && pex.SqlState == PostgresErrorCodes.UniqueViolation
+           && (pex.ConstraintName == "ux_evidence_records_tx_type_source"
+               || pex.ConstraintName == "ux_evidence_records_tx_sequence");
+  }
+
+  private static bool IsTransactionUniqueViolation(DbUpdateException ex)
+  {
+    return ex.InnerException is PostgresException pex
+           && pex.SqlState == PostgresErrorCodes.UniqueViolation
+           && pex.ConstraintName == "ix_transactions_workspace_id_provider_mode_provider_transaction_id";
   }
 
   private static bool IsValidCountryCode(string? code)
