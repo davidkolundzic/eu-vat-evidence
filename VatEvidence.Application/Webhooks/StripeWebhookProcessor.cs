@@ -176,6 +176,8 @@ public sealed partial class StripeWebhookProcessor(
     string? ipCountryHint,
     CancellationToken ct)
   {
+    LogRawWebhookPayload("checkout.session.completed", payloadJson);
+
     var doc = JsonDocument.Parse(payloadJson);
     var dataObj = doc.RootElement.GetProperty("data").GetProperty("object");
 
@@ -444,9 +446,33 @@ public sealed partial class StripeWebhookProcessor(
       if (transaction.CustomerEmail is null && customerEmail is not null) transaction.CustomerEmail = customerEmail;
     }
 
-    // 2) Append IP evidence (only if available)
-    // Note: Billing evidence comes from checkout.session.completed (primary flow)
-    // This handler only appends IP evidence from payment_intent charges data
+    // 2) Append billing evidence (if available) as fallback
+    // Primary source is checkout.session.completed, but payment_intent can provide it too
+    if (!string.IsNullOrWhiteSpace(billingCountry))
+    {
+      await _evidenceAppendService.AppendAsync(
+        new AppendEvidenceCommand(
+          TransactionId: transaction.Id,
+          EvidenceType: EvidenceType.Billingcountry,
+          CountryCode: billingCountry,
+          SourceRef: $"{piId}:billing",
+          CapturedUtc: receivedUtc
+        ),
+        ct);
+
+      try
+      {
+        await _db.SaveChangesAsync(ct);
+        LogBillingCountryAppended(billingCountry, transaction.Id);
+      }
+      catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex))
+      {
+        // Parallel webhook appended same evidence - this is OK (idempotent)
+        _logger.LogInformation("Billing evidence already exists for Transaction={TransactionId}, SourceRef={SourceRef} (parallel webhook)", transaction.Id, $"{piId}:billing");
+      }
+    }
+
+    // 3) Append IP evidence (only if available)
     if (!string.IsNullOrWhiteSpace(ipCountry))
     {
       await _evidenceAppendService.AppendAsync(
