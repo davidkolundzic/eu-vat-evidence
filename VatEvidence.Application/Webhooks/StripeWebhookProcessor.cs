@@ -218,6 +218,17 @@ public sealed partial class StripeWebhookProcessor(
       LogCheckoutSessionMissingBillingCountry(sessionId, piId);
     }
 
+    // Extract IP country from hint (checkout session doesn't contain IP data directly)
+    string? ipCountry = null;
+    if (!string.IsNullOrWhiteSpace(ipCountryHint))
+    {
+      var hintCode = ipCountryHint.Trim().ToUpperInvariant();
+      if (IsValidCountryCode(hintCode))
+      {
+        ipCountry = hintCode;
+      }
+    }
+
     // Extract amount_total and currency from session
     var amountTotal = dataObj.TryGetProperty("amount_total", out var amtElement) && amtElement.ValueKind == JsonValueKind.Number
       ? amtElement.GetInt64()
