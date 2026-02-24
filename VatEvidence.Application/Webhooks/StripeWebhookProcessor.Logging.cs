@@ -28,6 +28,9 @@ public sealed partial class StripeWebhookProcessor
   [LoggerMessage(Level = LogLevel.Information, Message = "Appended IP country evidence {Country} for transaction {TransactionId}")]
   private partial void LogIpCountryAppended(string country, Guid transactionId);
 
+  [LoggerMessage(Level = LogLevel.Information, Message = "Canonical fetch for PI {PaymentIntentId}: billing={BillingCountry}, ip={IpCountry}")]
+  partial void LogCanonicalFetch(string paymentIntentId, string? billingCountry, string? ipCountry);
+
   [LoggerMessage(Level = LogLevel.Debug, Message = "Raw webhook payload for event {EventType}: {PayloadJson}")]
   private partial void LogRawWebhookPayload(string eventType, string payloadJson);
 

@@ -3,10 +3,15 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using VatEvidence.Application.Evidence;
 using VatEvidence.Application.Interfaces;
+using VatEvidence.Application.Options;
 using VatEvidence.Application.Webhooks;
 using VatEvidence.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure StripeOptions
+builder.Services.Configure<StripeOptions>(
+  builder.Configuration.GetSection(StripeOptions.SectionName));
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
