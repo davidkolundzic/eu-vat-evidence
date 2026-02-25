@@ -1,0 +1,78 @@
+### Staging Webhook Test - Cloudflare header (production-like)
+POST https://staging-api.vatevidence.info/api/webhooks/stripe/test?workspace_id=YOUR_GUID_HERE
+Content-Type: application/json
+Stripe-Signature: t=1234567890,v1=mock_signature
+CF-IPCountry: HR
+
+{
+  "id": "evt_test_webhook_cf",
+  "object": "event",
+  "type": "payment_intent.succeeded",
+  "created": 1234567890,
+  "data": {
+    "object": {
+      "id": "pi_test_12345"
+    }
+  }
+}
+
+###
+
+### Staging Webhook Test - Debug header override (E2E testing)
+POST https://staging-api.vatevidence.info/api/webhooks/stripe/test?workspace_id=YOUR_GUID_HERE
+Content-Type: application/json
+Stripe-Signature: t=1234567890,v1=mock_signature
+X-Debug-IPCountry: RS
+
+{
+  "id": "evt_test_webhook_debug_header",
+  "object": "event",
+  "type": "payment_intent.succeeded",
+  "created": 1234567890,
+  "data": {
+    "object": {
+      "id": "pi_test_12346"
+    }
+  }
+}
+
+###
+
+### Staging Webhook Test - Query parameter override (Stripe CLI testing)
+POST https://staging-api.vatevidence.info/api/webhooks/stripe/test?workspace_id=YOUR_GUID_HERE&ip_country=BA
+Content-Type: application/json
+Stripe-Signature: t=1234567890,v1=mock_signature
+
+{
+  "id": "evt_test_webhook_query",
+  "object": "event",
+  "type": "payment_intent.succeeded",
+  "created": 1234567890,
+  "data": {
+    "object": {
+      "id": "pi_test_12347"
+    }
+  }
+}
+
+###
+
+### Production Webhook Test - NO debug override (will use CF-IPCountry only)
+POST https://api.vatevidence.info/api/webhooks/stripe/live?workspace_id=YOUR_GUID_HERE
+Content-Type: application/json
+Stripe-Signature: t=1234567890,v1=mock_signature
+X-Debug-IPCountry: RS
+CF-IPCountry: HR
+
+# NOTE: In production, X-Debug-IPCountry is IGNORED, only CF-IPCountry is used
+{
+  "id": "evt_prod_webhook",
+  "object": "event",
+  "type": "payment_intent.succeeded",
+  "created": 1234567890,
+  "data": {
+    "object": {
+      "id": "pi_prod_12348"
+    }
+  }
+}

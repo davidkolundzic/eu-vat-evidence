@@ -165,6 +165,14 @@ public sealed partial class StripeWebhookProcessor(
                 "ix_provider_events_workspace_id_provider_mode_provider_event_id",
                 StringComparison.Ordinal))
     {
+      // KLJU?NO: detach failed insert iz ChangeTracker-a da se ne pokuša ponovo insertovati
+      // kasnije u ProcessStripeTransactionAsync kada se pozove SaveChangesAsync
+      // Note: Cast to DbContext needed because Entry is not exposed via IAppDbContext interface
+      if (_db is DbContext dbContext)
+      {
+        dbContext.Entry(providerEvent).State = EntityState.Detached;
+      }
+
       // Duplicate event: u?itaj postoje?i iz DB i vrati ga (bez tracking-a)
       var existing = await _db.ProviderEvents
         .AsNoTracking()
@@ -173,6 +181,9 @@ public sealed partial class StripeWebhookProcessor(
           x.Provider == providerKind &&
           x.Mode == mode &&
           x.ProviderEventId == cmd.EventId, ct);
+
+      _logger.LogInformation("Duplicate provider_event detected: EventId={EventId}, WorkspaceId={WorkspaceId}, Mode={Mode}. Loaded existing from DB.",
+        cmd.EventId, cmd.WorkspaceId, mode);
 
       return existing;
     }

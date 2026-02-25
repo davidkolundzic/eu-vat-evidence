@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Primitives;
 using VatEvidence.Application.Interfaces;
 using VatEvidence.Application.Webhooks;
 using VatEvidence.Domain;
@@ -14,7 +15,8 @@ public sealed partial class StripeWebhookController(
   IAppDbContext _db,
   IStripeSignatureValidator _signatureValidator,
   IWebhookProcessor _webhookProcessor,
-  ILogger<StripeWebhookController> _logger) : ControllerBase
+  ILogger<StripeWebhookController> _logger,
+  IHostEnvironment _env) : ControllerBase
 {
   [HttpPost("test")]
   public async Task<IActionResult> HandleTestWebhook()
@@ -86,16 +88,8 @@ public sealed partial class StripeWebhookController(
     // 6) Parse event
     var stripeEvent = Stripe.EventUtility.ParseEvent(payload, throwOnApiVersionMismatch: false);
 
-    string? ipCountryHint = null;
-    if (Request.Headers.TryGetValue("CF-IPCountry", out var ipCountry) && !string.IsNullOrWhiteSpace(ipCountry))
-    {
-      ipCountryHint = ipCountry.ToString();
-    }
-    if (string.IsNullOrWhiteSpace(ipCountryHint) &&
-      Request.Headers.TryGetValue("X-IP-Country", out var xip) && !string.IsNullOrWhiteSpace(xip))
-    {
-      ipCountryHint = xip.ToString();
-    }
+    var ipCountryHint = GetIpCountryHint();
+
     // 7) Process webhook
     var command = new ProcessWebhookCommand(
       WorkspaceId: workspaceId,
@@ -126,5 +120,46 @@ public sealed partial class StripeWebhookController(
 
     LogNonRetryableError(stripeEvent.Id);
     return Ok(new { processed = false, error = result.ErrorMessage, retryable = false });
+  }
+
+  /// <summary>
+  /// Extracts IP country hint from request headers with fallback chain.
+  /// Priority: CF-IPCountry (Cloudflare) -> X-IP-Country (fallback) -> staging debug overrides.
+  /// </summary>
+  private string? GetIpCountryHint()
+  {
+    // 1) Primary: Cloudflare GeoIP header
+    if (Request.Headers.TryGetValue("CF-IPCountry", out var cf) && !StringValues.IsNullOrEmpty(cf))
+    {
+      var v = cf.ToString().Trim().ToUpperInvariant();
+      return string.IsNullOrWhiteSpace(v) ? null : v;
+    }
+
+    // 2) Fallback: generic proxy/CDN header
+    if (Request.Headers.TryGetValue("X-IP-Country", out var xip) && !StringValues.IsNullOrEmpty(xip))
+    {
+      var v = xip.ToString().Trim().ToUpperInvariant();
+      return string.IsNullOrWhiteSpace(v) ? null : v;
+    }
+
+    // 3) Staging-only override (for E2E testing without Cloudflare)
+    if (_env.IsStaging())
+    {
+      // Debug header override
+      if (Request.Headers.TryGetValue("X-Debug-IPCountry", out var dbgH) && !StringValues.IsNullOrEmpty(dbgH))
+      {
+        var v = dbgH.ToString().Trim().ToUpperInvariant();
+        return string.IsNullOrWhiteSpace(v) ? null : v;
+      }
+
+      // Query parameter override (useful for Stripe CLI testing)
+      if (Request.Query.TryGetValue("ip_country", out var dbgQ) && !StringValues.IsNullOrEmpty(dbgQ))
+      {
+        var v = dbgQ.ToString().Trim().ToUpperInvariant();
+        return string.IsNullOrWhiteSpace(v) ? null : v;
+      }
+    }
+
+    return null;
   }
 }

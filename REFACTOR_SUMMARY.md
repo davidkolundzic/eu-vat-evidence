@@ -174,6 +174,38 @@ Očekivani log output:
 
 ---
 
+## Bug Fixes ✅
+
+### Duplicate Key Violation Fix (provider_events)
+
+**Problem:** Kada Stripe pošalje duplicate webhook, failed `providerEvent` insert ostaje u EF ChangeTracker-u, pa kasnije `SaveChangesAsync()` opet pokuša insert → 500 error.
+
+**Fix:** Dodao sam detachment failed entiteta iz ChangeTracker-a:
+
+```csharp
+catch (DbUpdateException ex) when (ex.InnerException is PostgresException pex && ...)
+{
+  // Detach failed insert iz ChangeTracker-a
+  if (_db is DbContext dbContext)
+  {
+    dbContext.Entry(providerEvent).State = EntityState.Detached;
+  }
+
+  // Load existing event
+  var existing = await _db.ProviderEvents.AsNoTracking().SingleAsync(...);
+  return existing;
+}
+```
+
+**Rezultat:**
+- ✅ Duplicate webhook-ovi sada vraćaju 200 OK (ne 500)
+- ✅ Stripe ne retry-uje duplicate event-e beskrajno
+- ✅ Parallel webhook processing radi ispravno
+
+**Detalji:** Proveri `DUPLICATE_KEY_FIX.md`
+
+---
+
 ## Legacy kod (cleanup) ✅
 
 **Stare metode su premeštene u `StripeWebhookProcessor.Legacy.cs`:**
