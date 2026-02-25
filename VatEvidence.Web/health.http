@@ -1,0 +1,22 @@
+### Health Check - Main endpoint
+GET https://staging-api.vatevidence.info/api/health
+
+###
+
+### Health Check - DB connection test
+GET https://staging-api.vatevidence.info/api/health/db
+
+###
+
+### Health Check - Environment info
+GET https://staging-api.vatevidence.info/api/health/info
+
+###
+
+### Health Check - Cloudflare headers test (verify CF-IPCountry)
+GET https://staging-api.vatevidence.info/api/health/headers
+
+###
+
+### Local test (no Cloudflare headers expected)
+GET http://localhost:5000/api/health/headers

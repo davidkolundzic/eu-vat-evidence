@@ -134,4 +134,44 @@ public sealed class HealthController(
     var canConnect = await _dbContext.Database.CanConnectAsync();
     return Ok(new { database = canConnect ? "Connected" : "Failed" });
   }
+
+  /// <summary>
+  /// Test endpoint to verify Cloudflare headers (CF-IPCountry) are being forwarded.
+  /// Useful for debugging webhook IP country extraction.
+  /// </summary>
+  [HttpGet("headers")]
+  public IActionResult Headers()
+  {
+    var cfIpCountry = Request.Headers["CF-IPCountry"].ToString();
+    var cfConnectingIp = Request.Headers["CF-Connecting-IP"].ToString();
+    var cfRay = Request.Headers["CF-RAY"].ToString();
+    var xForwardedFor = Request.Headers["X-Forwarded-For"].ToString();
+    var xRealIp = Request.Headers["X-Real-IP"].ToString();
+
+    // All headers for debugging
+    var allHeaders = Request.Headers
+      .Where(h => h.Key.StartsWith("CF-", StringComparison.OrdinalIgnoreCase) ||
+                  h.Key.StartsWith("X-", StringComparison.OrdinalIgnoreCase) ||
+                  h.Key.Equals("User-Agent", StringComparison.OrdinalIgnoreCase))
+      .ToDictionary(h => h.Key, h => h.Value.ToString());
+
+    return Ok(new
+    {
+      cloudflare = new
+      {
+        enabled = !string.IsNullOrWhiteSpace(cfIpCountry) || !string.IsNullOrWhiteSpace(cfRay),
+        ipCountry = cfIpCountry,
+        connectingIp = cfConnectingIp,
+        ray = cfRay
+      },
+      forwarding = new
+      {
+        xForwardedFor,
+        xRealIp
+      },
+      relevantHeaders = allHeaders,
+      remoteIpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+      timestamp = DateTimeOffset.UtcNow
+    });
+  }
 }
