@@ -24,6 +24,8 @@ builder.Services.AddScoped<IEvidenceHashService, EvidenceHashService>();
 builder.Services.AddScoped<IEvidenceChainVerifier, EvidenceChainVerifier>();
 builder.Services.AddScoped<IEvidenceAppendService, EvidenceAppendService>();
 
+// Stripe services
+builder.Services.AddScoped<VatEvidence.Application.Stripe.IStripeCanonicalReader, VatEvidence.Application.Stripe.StripeCanonicalReader>();
 builder.Services.AddScoped<IStripeSignatureValidator, StripeSignatureValidator>();
 builder.Services.AddScoped<IWebhookProcessor, StripeWebhookProcessor>();
 

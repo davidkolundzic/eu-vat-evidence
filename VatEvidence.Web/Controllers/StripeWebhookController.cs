@@ -88,9 +88,7 @@ public sealed partial class StripeWebhookController(
     // 6) Parse event
     var stripeEvent = Stripe.EventUtility.ParseEvent(payload, throwOnApiVersionMismatch: false);
 
-    var ipCountryHint = GetIpCountryHint();
-
-    // 7) Process webhook
+    // 7) Process webhook (NO IP hint - webhooks originate from Stripe servers, not buyer)
     var command = new ProcessWebhookCommand(
       WorkspaceId: workspaceId,
       Provider: ProviderNames.Stripe,
@@ -99,7 +97,7 @@ public sealed partial class StripeWebhookController(
       EventType: stripeEvent.Type,
       CreatedUtc: stripeEvent.Created,
       PayloadJson: payload,
-      IpCountryHint: ipCountryHint
+      IpCountryHint: null // Webhooks don't have buyer IP - only Stripe server IP
     );
 
     var result = await _webhookProcessor.ProcessAsync(command);

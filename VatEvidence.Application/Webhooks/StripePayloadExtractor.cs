@@ -57,7 +57,25 @@ public static class StripePayloadExtractor
   /// <summary>
   /// Creates audit-friendly snapshot for billing evidence.
   /// </summary>
-  public static JsonDocument CreateBillingSnapshot(string chargeId, string country, Stripe.Address? address)
+  public static JsonDocument CreateBillingSnapshot(string chargeId, string country, global::Stripe.Address? address)
+  {
+    var snapshot = new
+    {
+      chargeId,
+      country,
+      postalCode = address?.PostalCode ?? string.Empty,
+      city = address?.City ?? string.Empty,
+      source = "stripe.latest_charge.billing_details"
+    };
+
+    var json = JsonSerializer.Serialize(snapshot);
+    return JsonDocument.Parse(json);
+  }
+
+  /// <summary>
+  /// Creates audit-friendly snapshot for billing evidence from canonical BillingAddressSnapshot.
+  /// </summary>
+  public static JsonDocument CreateBillingSnapshot(string chargeId, string country, Application.Stripe.BillingAddressSnapshot? address)
   {
     var snapshot = new
     {

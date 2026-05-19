@@ -1,15 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Npgsql;
-using Stripe;
 using System.Data.Common;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using VatEvidence.Application.Evidence;
 using VatEvidence.Application.Interfaces;
-using VatEvidence.Application.Options;
+using VatEvidence.Application.Stripe;
 using VatEvidence.Domain;
 
 namespace VatEvidence.Application.Webhooks;
@@ -18,7 +16,7 @@ public sealed partial class StripeWebhookProcessor(
   IAppDbContext _db,
   ILogger<StripeWebhookProcessor> _logger,
   IEvidenceAppendService _evidenceAppendService,
-  IOptions<StripeOptions> _stripeOptions) : IWebhookProcessor
+  IStripeCanonicalReader _canonicalReader) : IWebhookProcessor
 {
   public async Task<WebhookProcessResult> ProcessAsync(ProcessWebhookCommand cmd, CancellationToken ct = default)
   {
@@ -201,32 +199,19 @@ public sealed partial class StripeWebhookProcessor(
     DateTimeOffset receivedUtc,
     CancellationToken ct)
   {
-    // 1) Select Stripe API key based on mode
-    var apiKey = string.Equals(mode, "test", StringComparison.OrdinalIgnoreCase)
-      ? _stripeOptions.Value.TestSecretKey
-      : _stripeOptions.Value.LiveSecretKey;
+    // 1) Fetch canonical PaymentIntent state from Stripe API via dedicated reader service
+    var stripeMode = string.Equals(mode, "test", StringComparison.OrdinalIgnoreCase)
+      ? StripeMode.Test
+      : StripeMode.Live;
 
-    if (string.IsNullOrWhiteSpace(apiKey))
-    {
-      throw new InvalidOperationException($"Stripe API key not configured for mode: {mode}");
-    }
-
-    // 2) Fetch canonical PaymentIntent state from Stripe API
-    var requestOptions = new RequestOptions { ApiKey = apiKey };
-    var piService = new PaymentIntentService();
-
-    PaymentIntent paymentIntent;
+    CanonicalStripeSnapshot snapshot;
     try
     {
-      paymentIntent = await piService.GetAsync(piId, new PaymentIntentGetOptions
-      {
-        Expand = ["latest_charge"]
-      }, requestOptions, ct);
+      snapshot = await _canonicalReader.ReadAsync(piId, stripeMode, ct);
     }
-    catch (StripeException ex)
+    catch (global::Stripe.StripeException ex)
     {
       // 404 = PaymentIntent doesn't exist (non-retryable)
-      // Stripe.NET throws StripeException with HttpStatusCode = 404 instead of returning null
       if (ex.HttpStatusCode == System.Net.HttpStatusCode.NotFound ||
           ex.StripeError?.Code == "resource_missing")
       {
@@ -239,55 +224,19 @@ public sealed partial class StripeWebhookProcessor(
       throw; // Retryable: Stripe will retry
     }
 
-    // 3) Extract canonical billing country from latest_charge.billing_details
-    string? billingCountry = null;
-    string? chargeId = null;
+    // 2) Extract billing country from snapshot
+    string? billingCountry = snapshot.BillingCountry;
 
-    if (paymentIntent.LatestCharge is Charge charge)
-    {
-      chargeId = charge.Id;
+    LogCanonicalFetch(piId, billingCountry, null);
 
-      if (charge.BillingDetails?.Address?.Country is { } country &&
-          IsValidCountryCode(country))
-      {
-        billingCountry = country.Trim().ToUpperInvariant();
-      }
-    }
-
-    // 4) Extract IP country from hint (Stripe doesn't expose IP directly)
-    string? ipCountry = null;
-    if (!string.IsNullOrWhiteSpace(ipCountryHint))
-    {
-      var hintCode = ipCountryHint.Trim().ToUpperInvariant();
-      if (IsValidCountryCode(hintCode))
-      {
-        ipCountry = hintCode;
-      }
-    }
-
-    // 5) Extract customer email (fallback chain: charge.billing_details.email -> pi.receipt_email)
-    string? customerEmail = null;
-    if (paymentIntent.LatestCharge is Charge chg && !string.IsNullOrWhiteSpace(chg.BillingDetails?.Email))
-    {
-      customerEmail = chg.BillingDetails.Email;
-    }
-    else if (!string.IsNullOrWhiteSpace(paymentIntent.ReceiptEmail))
-    {
-      customerEmail = paymentIntent.ReceiptEmail;
-    }
-
-    var createdUtc = new DateTimeOffset(DateTime.SpecifyKind(paymentIntent.Created, DateTimeKind.Utc));
-
-    LogCanonicalFetch(piId, billingCountry, ipCountry);
-
-    // 6) Wrap entire flow in DB transaction
+    // 3) Wrap entire flow in DB transaction
     await using var dbTx = await _db.BeginTransactionAsync(ct);
 
     var txMode = string.Equals(mode, "test", StringComparison.OrdinalIgnoreCase)
       ? ProviderMode.Test
       : ProviderMode.Live;
 
-    // 7) Upsert Transaction
+    // 4) Upsert Transaction
     var transaction = await _db.Transactions
       .SingleOrDefaultAsync(x =>
         x.WorkspaceId == workspaceId &&
@@ -304,11 +253,11 @@ public sealed partial class StripeWebhookProcessor(
         Provider = ProviderKind.Stripe,
         Mode = txMode,
         ProviderTransactionId = piId,
-        ProviderChargeId = chargeId,
-        AmountMinor = paymentIntent.Amount,
-        Currency = paymentIntent.Currency?.ToUpperInvariant() ?? "EUR",
-        CustomerEmail = customerEmail,
-        CreatedUtc = createdUtc,
+        ProviderChargeId = snapshot.ChargeId,
+        AmountMinor = snapshot.AmountMinor,
+        Currency = snapshot.Currency,
+        CustomerEmail = snapshot.CustomerEmail,
+        CreatedUtc = snapshot.CreatedUtc,
         Status = TransactionStatus.Insufficient,
         StatusReason = "Awaiting evidence"
       };
@@ -329,35 +278,35 @@ public sealed partial class StripeWebhookProcessor(
           x.Mode == txMode &&
           x.ProviderTransactionId == piId, ct);
 
-        if (transaction.ProviderChargeId is null && chargeId is not null)
-          transaction.ProviderChargeId = chargeId;
-        if (transaction.CustomerEmail is null && customerEmail is not null)
-          transaction.CustomerEmail = customerEmail;
+        if (transaction.ProviderChargeId is null && snapshot.ChargeId is not null)
+          transaction.ProviderChargeId = snapshot.ChargeId;
+        if (transaction.CustomerEmail is null && snapshot.CustomerEmail is not null)
+          transaction.CustomerEmail = snapshot.CustomerEmail;
       }
     }
     else
     {
       // Refresh missing fields
-      if (transaction.ProviderChargeId is null && chargeId is not null)
-        transaction.ProviderChargeId = chargeId;
-      if (transaction.CustomerEmail is null && customerEmail is not null)
-        transaction.CustomerEmail = customerEmail;
+      if (transaction.ProviderChargeId is null && snapshot.ChargeId is not null)
+        transaction.ProviderChargeId = snapshot.ChargeId;
+      if (transaction.CustomerEmail is null && snapshot.CustomerEmail is not null)
+        transaction.CustomerEmail = snapshot.CustomerEmail;
     }
 
-    // 8) Append billing evidence (if available)
-    if (!string.IsNullOrWhiteSpace(billingCountry) && !string.IsNullOrWhiteSpace(chargeId))
+    // 5) Append billing evidence (if available)
+    if (!string.IsNullOrWhiteSpace(billingCountry) && !string.IsNullOrWhiteSpace(snapshot.ChargeId))
     {
       var billingSnapshot = StripePayloadExtractor.CreateBillingSnapshot(
-        chargeId,
+        snapshot.ChargeId,
         billingCountry,
-        paymentIntent.LatestCharge?.BillingDetails?.Address);
+        snapshot.BillingAddress);
 
       await _evidenceAppendService.AppendAsync(
         new AppendEvidenceCommand(
           TransactionId: transaction.Id,
           EvidenceType: EvidenceType.Billingcountry,
           CountryCode: billingCountry,
-          SourceRef: $"stripe:charge:{chargeId}:billing",
+          SourceRef: $"stripe:charge:{snapshot.ChargeId}:billing",
           ValueRaw: billingSnapshot,
           CapturedUtc: receivedUtc
         ),
@@ -374,38 +323,7 @@ public sealed partial class StripeWebhookProcessor(
       }
     }
 
-    // 9) Append IP evidence (if available)
-    if (!string.IsNullOrWhiteSpace(ipCountry))
-    {
-      // ipCountry is non-null only if ipCountryHint was present and valid
-      var ipSnapshot = StripePayloadExtractor.CreateIpSnapshot(
-        ipCountry,
-        "CF-IPCountry",
-        headerPresent: !string.IsNullOrWhiteSpace(ipCountryHint));
-
-      await _evidenceAppendService.AppendAsync(
-        new AppendEvidenceCommand(
-          TransactionId: transaction.Id,
-          EvidenceType: EvidenceType.Ipcountry,
-          CountryCode: ipCountry,
-          SourceRef: $"cf-ipcountry",
-          ValueRaw: ipSnapshot,
-          CapturedUtc: receivedUtc
-        ),
-        ct);
-
-      try
-      {
-        await _db.SaveChangesAsync(ct);
-        LogIpCountryAppended(ipCountry, transaction.Id);
-      }
-      catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex))
-      {
-        _logger.LogInformation("IP evidence already exists for Transaction={TransactionId} (parallel webhook)", transaction.Id);
-      }
-    }
-
-    // 10) Evaluate status from current evidence snapshot
+    // 6) Evaluate status from current evidence snapshot
     var (status, reason) = await EvaluateStatusAsync(transaction.Id, ct);
     transaction.Status = status;
     transaction.StatusReason = reason;
