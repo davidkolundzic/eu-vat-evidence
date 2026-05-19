@@ -1,13 +1,11 @@
 ﻿using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
-using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace VatEvidence.Test.Integration.TestInfrastructure
 {
-  public class TestAppFactory: WebApplicationFactory<Program>
+  public class TestAppFactory : WebApplicationFactory<Program>
   {
     private readonly string _connectionString;
 
@@ -19,8 +17,7 @@ namespace VatEvidence.Test.Integration.TestInfrastructure
       {
         var dict = new Dictionary<string, string?>
         {
-          ["ConnectionStrings:Default"] = _connectionString,
-          ["Stripe:WebhookSecret"] = "whsec_test_secret_123"
+          ["ConnectionStrings:Default"] = _connectionString
         };
         config.AddInMemoryCollection(dict);
       });
