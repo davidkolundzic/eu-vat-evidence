@@ -1,0 +1,27 @@
+# For more info on HTTP files go to https://aka.ms/vs/httpfile
+@baseUrl = https://localhost:7297
+
+## Korak 1 - Format validacija  (bez mreže)
+GET {{baseUrl}}/api/vat/validate/HR43118119983
+### VIAS
+GET {{baseUrl}}/api/vat/check/HR43118119983
+
+### local 
+### DE
+GET {{baseUrl}}/api/vat/validate/DE123475223
+
+### VIAS
+### Njemačka
+GET {{baseUrl}}/api/vat/check/DE123475223
+
+
+
+
+
+###
+
+### Austrija
+GET {{baseUrl}}/api/vat/validate/ATU12345678
+
+###
+GET {{baseUrl}}/api/vat/check/ATU12345678

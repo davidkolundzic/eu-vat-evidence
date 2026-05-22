@@ -11,7 +11,7 @@ namespace VatEvidence.Test.Integration.TestInfrastructure
     {
       using var scope = serviceProvider.CreateScope();
       var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-      // Stari kod rucno imenovanje tabela i restartovanje identiteta, ali to je krhko i lako se zaboravi da se doda nova tabela
+      // Old code manually named tables and restarted identities, but that was fragile and easy to forget when adding a new table
       //await db.Database.ExecuteSqlRawAsync(@"
       //  TRUNCATE TABLE 
       //    provider_events, 
@@ -25,7 +25,7 @@ namespace VatEvidence.Test.Integration.TestInfrastructure
       //  RESTART IDENTITY CASCADE;
       //");
 
-      // Novi kod koristi DbContext da nadje sve DbSet-ove i obrise podatke iz njih, a zatim restartuje identitet
+      // The new code uses DbContext to find all DbSet entities and deletes their data, then restarts identities
       var sql = GenerateSql(db);
       if (!string.IsNullOrWhiteSpace(sql))
       {
@@ -37,8 +37,8 @@ namespace VatEvidence.Test.Integration.TestInfrastructure
     public static string GenerateSql(AppDbContext db)
     {
       var tables = db.Model.GetEntityTypes()
-       // Ignoriši owned entity types jer oni nemaju svoje tabele
-       // preskoči EF core internal / keyless / view mapping
+       // Ignore owned entity types because they don't have their own tables
+       // skip EF Core internal / keyless / view mapping
        .Where(et => !et.IsOwned())
        .Select(et => new
        {
@@ -46,13 +46,13 @@ namespace VatEvidence.Test.Integration.TestInfrastructure
          Table = et.GetTableName()
        })
        .Where(x => !string.IsNullOrWhiteSpace(x.Table))
-       // DISTINCT jer TPH može vratiti više entity tipova za istu tablicu
+       // DISTINCT because TPH can return multiple entity types for the same table
        .Distinct()
        .ToList();
 
       if (tables.Count == 0) return string.Empty;
 
-      // Quote schema + table (za slučaj snake_case, reserved words, mixed case)
+      // Quote schema + table (for snake_case, reserved words, mixed case)
       static string Q(string ident) => "\"" + ident.Replace("\"", "\"\"") + "\"";
 
       var sb = new StringBuilder();

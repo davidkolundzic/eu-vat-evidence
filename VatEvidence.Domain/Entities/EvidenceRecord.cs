@@ -8,7 +8,7 @@ namespace VatEvidence.Domain
     public Guid TransactionId { get; set; }
     public Transaction Transaction { get; set; } = default!;
 
-    // Monotoni redni broj unutar transakcije (determinističan ordering za hash-chain)
+    // Monotonic sequence number within the transaction (deterministic ordering for the hash-chain)
     public long Sequence { get; set; }
 
     public DateTimeOffset CapturedUtc { get; set; }
@@ -16,7 +16,7 @@ namespace VatEvidence.Domain
     public EvidenceType EvidenceType { get; set; }
     public string CountryCode { get; set; } = ""; // ISO2
 
-    public JsonDocument? ValueRaw { get; set; }   // jsonb (može i null)
+    public JsonDocument? ValueRaw { get; set; }   // jsonb (may be null)
     public string SourceRef { get; set; } = "";   // "stripe:test:evt_123"
 
     public string RecordHash { get; set; } = "";

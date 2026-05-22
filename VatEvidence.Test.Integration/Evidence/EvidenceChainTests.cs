@@ -30,13 +30,13 @@ namespace VatEvidence.Test.Integration.Evidence
         .Build();
 
 
-      // 1) Upiši početno stanje u bazu
+      // 1) Write initial state to the database
       db.Workspaces.Add(ws);
       db.Transactions.Add(tx);
       await db.SaveChangesAsync();
 
-      // Važno: Ovaj test ne koristi transakciju baze da bi simulirao realan scenarij gdje se dva poziva AppendAsync dešavaju u različitim transakcijama (npr. paralelni webhook-ovi).
-      // - Ako bi se oba poziva dešavala unutar iste transakcije, drugi poziv ne bi vidio evidencu kreiranu prvim pozivom jer nije bila committana, što bi onemogućilo testiranje ispravnog formiranja lanca.
+      // Important: This test does not use a single database transaction to simulate a real scenario where two AppendAsync calls happen in different transactions (e.g. parallel webhooks).
+      // - If both calls were in the same transaction, the second call would not see the evidence created by the first call because it wasn't committed yet, which would prevent testing proper chain formation.
       await using var dbTx = await db.Database.BeginTransactionAsync();
 
 
@@ -49,10 +49,10 @@ namespace VatEvidence.Test.Integration.Evidence
         CapturedUtc: DateTimeOffset.UtcNow
       ));
 
-      // Snimi prvi evidence da bude vidljiv sledećem upitu
+      // Persist the first evidence so it is visible to the next query
       await db.SaveChangesAsync();
 
-      // 3) Drugi evidence
+      // 3) Second evidence
       var ev2 = await append.AppendAsync(new AppendEvidenceCommand(
         TransactionId: tx.Id,
         EvidenceType: EvidenceType.Ipcountry,
@@ -75,7 +75,7 @@ namespace VatEvidence.Test.Integration.Evidence
     [Fact]
     public async Task AppendAsync_SameTypeSameSourceRef_ShouldBeIdempotent()
     {
-      // Ovaj test simulira scenarij paralelnih webhook-ova koji pokušavaju da upišu isti evidence (isti tx, type i source_ref).
+      // This test simulates parallel webhooks attempting to write the same evidence (same tx, type and source_ref).
       using var scope = Factory.Services.CreateScope();
       var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
       var append = scope.ServiceProvider.GetRequiredService<IEvidenceAppendService>();
@@ -107,14 +107,14 @@ namespace VatEvidence.Test.Integration.Evidence
       await db.SaveChangesAsync();
       await dbTx.CommitAsync();
 
-      e2.Id.Should().Be(e1.Id); // Drugi poziv sa istim type i source_ref treba da vrati isti evidence record, a ne da kreira novi. (AsNoTracing existing)
+      e2.Id.Should().Be(e1.Id); // The second call with the same type and source_ref should return the same evidence record, not create a new one. (AsNoTracing existing)
 
       var count = db.EvidenceRecords.Count(er =>
         er.TransactionId == tx.Id &&
         er.EvidenceType == EvidenceType.Billingcountry &&
         er.SourceRef == "evt_test_idempotent_1");
 
-      count.Should().Be(1); // Treba postojati samo jedan record sa tim type i source_ref, što potvrđuje idempotentnost.
+      count.Should().Be(1); // There should only be one record with that type and source_ref, confirming idempotency.
     }
   }
 }

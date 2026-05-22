@@ -6,6 +6,7 @@ namespace VatEvidence.Test.Integration.TestInfrastructure.Builders
   public sealed class TransactionBuilder
   {
     private Guid _id = TestGuids.TransactionId;
+  private Guid _workspaceId = TestGuids.WorkspaceId;
     private ProviderKind _provider = ProviderKind.Stripe;
     private ProviderMode _mode = ProviderMode.Test;
     private string _providerTransaction = "pi_test_123";
@@ -19,6 +20,7 @@ namespace VatEvidence.Test.Integration.TestInfrastructure.Builders
     public static TransactionBuilder Default() => new();
 
     public TransactionBuilder WithId(Guid id) { _id = id; return this; }
+    public TransactionBuilder ForWorkspaceId(Guid workspaceId) { _workspaceId = workspaceId; return this; }
     public TransactionBuilder WithProviderTransactionId(string providerTransactionId) { _providerTransaction = providerTransactionId; return this; }
     public TransactionBuilder WithChargeId(string providerChargeId) { _providerChargeId = providerChargeId; return this; }
     public TransactionBuilder WithAmountMinor(long amountMinor) { _amountMinor = amountMinor; return this; }
@@ -30,6 +32,7 @@ namespace VatEvidence.Test.Integration.TestInfrastructure.Builders
     public Transaction Build() => new()
     {
       Id = _id,
+      WorkspaceId = _workspaceId,
       Provider = _provider,
       Mode = _mode,
       ProviderTransactionId = _providerTransaction,

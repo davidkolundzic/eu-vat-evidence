@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,14 +15,28 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
+    <PackageReference Include="xunit" Version="2.4.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.5" />
+    <PackageReference Include="FluentAssertions" Version="7.3.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.0" />
+    <PackageReference Include="DotNet.Testcontainers" Version="1.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\VatEvidence.Application\VatEvidence.Application.csproj" />
     <ProjectReference Include="..\VatEvidence.Domain\VatEvidence.Domain.csproj" />
     <ProjectReference Include="..\VatEvidence.Infrastructure\VatEvidence.Infrastructure.csproj" />
+    <ProjectReference Include="..\VatEvidence.Web\VatEvidence.Web.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="Extensions\" />
     <Folder Include="Pages\Dev\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
   </ItemGroup>
 
 </Project>

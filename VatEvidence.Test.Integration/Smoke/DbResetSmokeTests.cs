@@ -6,6 +6,7 @@ using System.Text.Json;
 using VatEvidence.Domain;
 using VatEvidence.Infrastructure.Persistence;
 using VatEvidence.Test.Integration.TestInfrastructure;
+using VatEvidence.Test.Integration.TestInfrastructure.Builders;
 
 namespace VatEvidence.Test.Integration.Smoke
 {
@@ -19,9 +20,13 @@ namespace VatEvidence.Test.Integration.Smoke
       using var scope = Factory.Services.CreateScope();
       var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+      var ws = WorkspaceBuilder.Default().WithId(Guid.NewGuid()).Build();
+      db.Workspaces.Add(ws);
+
       var transaction = new Transaction
       {
         Id = TestGuids.TransactionId,
+        WorkspaceId = ws.Id,
         Provider = ProviderKind.Stripe,
         Mode = ProviderMode.Test,
         ProviderTransactionId = "pi_reset_test",
@@ -34,6 +39,7 @@ namespace VatEvidence.Test.Integration.Smoke
       var providerEvent = new ProviderEvent
       {
         Id = TestGuids.ProviderEventId,
+        WorkspaceId = ws.Id,
         Provider = ProviderKind.Stripe,
         Mode = ProviderMode.Test,
         ProviderEventId = "evt_reset_test",

@@ -1,15 +1,15 @@
-﻿# Test Scenariji - Evidence Sequence & Idempotency
+﻿# Test Scenarios - Evidence Sequence & Idempotency
 
-## 🔧 Setup (jednom prije testiranja)
+## 🔧 Setup (run once before testing)
 
-### 1. Primijeni migraciju
+### 1. Apply migration
 
 ```bash
 cd VatEvidence.Web
 dotnet ef database update --project ../VatEvidence.Infrastructure
 ```
 
-### 2. Seed test workspace i connection
+### 2. Seed test workspace and connection
 
 ```sql
 -- Insert test workspace
@@ -37,16 +37,16 @@ dotnet run --project VatEvidence.Web
 # Ili u Visual Studio: F5
 ```
 
-Aplikacija će biti dostupna na: `https://localhost:5001` ili `http://localhost:5000`
+The application will be available at: `https://localhost:5001` or `http://localhost:5000`
 
 ---
 
 ## ✅ Test Case 1: Basic Webhook Flow (Happy Path)
 
-### Cilj
-Verifikuj da webhook kreira transaction + 2 evidence zapisa sa ispravnim sequence vrijednostima.
+### Goal
+Verify that the webhook creates a transaction + 2 evidence records with correct sequence values.
 
-### 1.1. Pošalji webhook
+### 1.1. Send the webhook
 
 Koristi `webhook-stripe.http` ili curl:
 
@@ -71,9 +71,9 @@ curl -X POST "https://localhost:5001/api/webhooks/stripe/test?workspace_id=11111
 }'
 ```
 
-**NAPOMENA**: Ako signature validation failuje, privremeno disabluj validaciju ili dodaj bypass za test secret.
+**NOTE**: If signature validation fails, temporarily disable validation or add a bypass for the test secret.
 
-### 1.2. Očekivani HTTP Response
+### 1.2. Expected HTTP Response
 
 ```json
 200 OK
@@ -83,7 +83,7 @@ curl -X POST "https://localhost:5001/api/webhooks/stripe/test?workspace_id=11111
 }
 ```
 
-### 1.3. Verifikuj DB state
+### 1.3. Verify DB state
 
 ```sql
 -- 1) Provjeri da je event kreiran
@@ -97,7 +97,7 @@ FROM provider_events
 WHERE provider_event_id = 'evt_test_001';
 ```
 
-**Očekivano**:
+**Expected**:
 - `processing_status` = 1 (Processed)
 - `error` = NULL
 
@@ -154,10 +154,10 @@ sequence | evidence_type | country_code | source_ref     | prev_record_hash
 
 ## 🔄 Test Case 2: Duplicate Webhook (Idempotency)
 
-### Cilj
-Pošalji **isti webhook 2x** i verifikuj da se **ne kreiraju dupli zapisi**.
+### Goal
+Send the **same webhook twice** and verify that **duplicate records are not created**.
 
-### 2.1. Pošalji isti webhook ponovo
+### 2.1. Send the same webhook again
 
 ```bash
 curl -X POST "https://localhost:5001/api/webhooks/stripe/test?workspace_id=11111111-1111-1111-1111-111111111111" \
@@ -178,7 +178,7 @@ curl -X POST "https://localhost:5001/api/webhooks/stripe/test?workspace_id=11111
 }'
 ```
 
-### 2.2. Očekivani Response
+### 2.2. Expected Response
 
 ```json
 200 OK
@@ -193,7 +193,7 @@ Ali u logovima trebalo bi biti:
 [Information] Duplicate event evt_test_001 already processed, skipping
 ```
 
-### 2.3. Verifikuj da NEMA duplikata
+### 2.3. Verify there are NO duplicates
 
 ```sql
 -- Provjeri da postoji SAMO 1 event
@@ -202,7 +202,7 @@ FROM provider_events
 WHERE provider_event_id = 'evt_test_001';
 ```
 
-**Očekivano**: `event_count` = 1
+**Expected**: `event_count` = 1
 
 ```sql
 -- Provjeri da postoje SAMO 2 evidence zapisa (ne 4!)
@@ -222,10 +222,10 @@ WHERE transaction_id = (SELECT id FROM transactions WHERE provider_transaction_i
 
 ## 🔁 Test Case 3: Failed Event Retry (Reprocessing)
 
-### Cilj
-Simuliraj scenario gdje event ranije failao, pa se retry-a i uspješno procesuira.
+### Goal
+Simulate a scenario where the event previously failed, then is retried and successfully processed.
 
-### 3.1. Ručno označi event kao Failed
+### 3.1. Mark the event as Failed manually
 
 ```sql
 -- Označi event kao Failed
@@ -236,7 +236,7 @@ SET
 WHERE provider_event_id = 'evt_test_001';
 ```
 
-### 3.2. Pošalji isti webhook ponovo
+### 3.2. Send the same webhook again
 
 ```bash
 curl -X POST "https://localhost:5001/api/webhooks/stripe/test?workspace_id=11111111-1111-1111-1111-111111111111" \
@@ -290,10 +290,10 @@ WHERE transaction_id = (SELECT id FROM transactions WHERE provider_transaction_i
 
 ## 🏁 Test Case 4: Parallel Webhooks (Race Condition)
 
-### Cilj
-Simultano pošalji 2 različita webhooks za 2 različite transakcije i verifikuj sequence.
+### Goal
+Send 2 different webhooks simultaneously for 2 different transactions and verify sequence.
 
-### 4.1. Setup - Pošalji 2 webhooks simultano
+### 4.1. Setup - Send 2 webhooks simultaneously
 
 **Terminal 1:**
 ```bash
@@ -335,7 +335,7 @@ curl -X POST "https://localhost:5001/api/webhooks/stripe/test?workspace_id=11111
 }' &
 ```
 
-### 4.2. Verifikuj sequence integrity
+### 4.2. Verify sequence integrity
 
 ```sql
 -- Transaction A evidence
@@ -378,8 +378,8 @@ sequence | prev_record_hash
 
 ## 🔗 Test Case 5: Hash Chain Integrity
 
-### Cilj
-Verifikuj da EvidenceChainVerifier prolazi nakon svih ovih test-ova.
+### Goal
+Verify that EvidenceChainVerifier passes after all these tests.
 
 ### 5.1. Ručna SQL verifikacija
 
@@ -404,7 +404,7 @@ FROM chain;
 
 **Očekivano**: Svi redovi `is_chain_valid` = `true`
 
-### 5.2. Provjeri sve transakcije odjednom
+### 5.2. Check all transactions at once
 
 ```sql
 WITH chain AS (
@@ -433,20 +433,20 @@ HAVING COUNT(*) != SUM(CASE
 END);
 ```
 
-**Očekivano**: Prazan rezultat (nema broken chain-ova)
+**Expected**: Empty result (no broken chains)
 
-✅ **PASS kriterij**:
-- Svi chain-ovi valid ✅
-- prev_record_hash pointeri ispravni ✅
+✅ **PASS criteria**:
+- All chains valid ✅
+- prev_record_hash pointers correct ✅
 
 ---
 
 ## 🚨 Test Case 6: Transient Error Handling
 
-### Cilj
-Verifikuj da controller vraća 500 za transient greške (deadlock), 200 za permanentne.
+### Goal
+Verify that the controller returns 500 for transient errors (deadlock), 200 for permanent ones.
 
-### 6.1. Test permanentne greške (bez retryable)
+### 6.1. Test permanent error (non-retryable)
 
 Privremeno modificiraj `ProcessPaymentIntentSucceededAsync` da baci exception:
 
@@ -463,7 +463,7 @@ curl -X POST "https://localhost:5001/api/webhooks/stripe/test?workspace_id=11111
 -d '{"id": "evt_test_error", "type": "payment_intent.succeeded", ...}'
 ```
 
-**Očekivani Response**:
+**Expected Response**:
 ```json
 200 OK
 {
@@ -473,7 +473,7 @@ curl -X POST "https://localhost:5001/api/webhooks/stripe/test?workspace_id=11111
 }
 ```
 
-### 6.2. Test transient greške (retryable)
+### 6.2. Test transient error (retryable)
 
 Modificiraj da baci DB exception:
 
@@ -491,10 +491,10 @@ throw new DbUpdateException("40P01: deadlock detected");
 }
 ```
 
-✅ **PASS kriterij**:
-- Permanentna greška → HTTP 200 ✅
-- Transient greška → HTTP 500 ✅
-- `retryable` flag ispravan ✅
+✅ **PASS criteria**:
+- Permanent error → HTTP 200 ✅
+- Transient error → HTTP 500 ✅
+- `retryable` flag correct ✅
 
 ---
 
@@ -512,7 +512,7 @@ SELECT
   (SELECT COUNT(*) FROM evidence_records) as total_evidence;
 ```
 
-**Očekivano** (nakon Test Case 1-5):
+**Expected** (after Test Case 1-5):
 ```
 total_events | processed_events | failed_events | total_transactions | total_evidence
 -------------|------------------|---------------|--------------------|----------------
@@ -530,11 +530,11 @@ GROUP BY transaction_id
 HAVING COUNT(*) != MAX(sequence);
 ```
 
-**Očekivano**: Prazan rezultat (sve transakcije imaju continuous sequence 1..N)
+**Expected**: Empty result (all transactions have continuous sequence 1..N)
 
 ---
 
-## 🧹 Cleanup (nakon testiranja)
+## 🧹 Cleanup (after testing)
 
 ```sql
 -- Obriši test podatke
@@ -555,11 +555,11 @@ DELETE FROM workspaces WHERE id = '11111111-1111-1111-1111-111111111111';
 
 | Test Case | Status | Notes |
 |-----------|--------|-------|
-| ✅ Basic webhook flow | ⬜ | Sequence 1,2 kreiran |
-| ✅ Duplicate webhook idempotency | ⬜ | Nema duplikata |
+| ✅ Basic webhook flow | ⬜ | Sequence 1,2 created |
+| ✅ Duplicate webhook idempotency | ⬜ | No duplicates |
 | ✅ Failed event reprocessing | ⬜ | Event status update |
-| ✅ Parallel webhooks (race) | ⬜ | FOR UPDATE lock radi |
-| ✅ Hash chain integrity | ⬜ | Verifier prolazi |
+| ✅ Parallel webhooks (race) | ⬜ | FOR UPDATE lock works |
+| ✅ Hash chain integrity | ⬜ | Verifier passes |
 | ✅ Transient error 500 | ⬜ | Stripe retry logic |
 
 ---

@@ -1,0 +1,51 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Text;
+
+namespace VatEvidence.Core.Classification;
+
+/// <summary>Country classification for EU, EEA and non-EU countries.</summary>
+public enum CountryGroup
+{
+  EU,
+  EEA,
+  NonEU
+}
+
+/// <summary>
+/// Classifies countries by their EU/EEA membership using ISO 3166-1 alpha-2 codes.
+/// </summary>
+public static class CountryClassification
+{
+  private static readonly IReadOnlySet<string> EuCountries = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES",
+        "FI", "FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT",
+        "NL", "PL", "PT", "RO", "SE", "SI", "SK"
+    };
+
+  private static readonly IReadOnlySet<string> EeaCountries = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "IS", "LI", "NO"
+    };
+
+  /// <summary>Returns the group classification for a given ISO 3166-1 alpha-2 country code.</summary>
+  public static CountryGroup Classify(string? isoCode)
+  {
+    if (string.IsNullOrWhiteSpace(isoCode))
+      return CountryGroup.NonEU;
+
+    if (EuCountries.Contains(isoCode)) return CountryGroup.EU;
+    if (EeaCountries.Contains(isoCode)) return CountryGroup.EEA;
+    return CountryGroup.NonEU;
+  }
+
+  /// <summary>Returns true if the country is an EU member state.</summary>
+  public static bool IsEU(string? isoCode) => Classify(isoCode) == CountryGroup.EU;
+
+  /// <summary>Returns true if the country requires EU VAT validation.</summary>
+  public static bool RequiresVatValidation(string? isoCode) => IsEU(isoCode);
+
+  /// <summary>All EU VAT prefixes (note: Greece uses EL, not GR).</summary>
+  public static IReadOnlySet<string> AllEuVatPrefixes => EuCountries;
+}

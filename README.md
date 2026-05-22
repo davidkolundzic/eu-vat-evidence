@@ -1,127 +1,178 @@
 # eu-vat-evidence
 
-Open source .NET library for EU VAT compliance evidence — country classification, VAT number validation, and tamper-evident hash-chain audit records for digital services.
+**Open-source .NET library for EU VAT number validation and compliance evidence.**
 
-## Overview
+Built for developers who need reliable, auditable VAT handling in European B2B applications — without pulling in heavy dependencies or cloud services for basic format checks.
 
-When selling digital services to EU customers, businesses must collect and retain evidence of the buyer's location to apply the correct VAT rate. This project provides the core building blocks to do that correctly.
+---
 
-**What this library does:**
+## Why this exists
 
-- Validates EU VAT numbers (format + checksum per country)
-- Classifies countries as EU / EEA / non-EU (ISO 3166-1 alpha-2)
-- Builds a tamper-evident hash-chain of evidence records per transaction
-- Verifies chain integrity (detects tampering or missing records)
-- Generates realistic test data for development and integration testing
+EU VAT compliance is a solved problem in theory and a surprisingly fragmented one in practice. Most libraries either:
 
-## Status
+- validate format only, with no path to active-status verification
+- call VIES directly without local pre-validation, wasting network round-trips on obviously invalid numbers
+- bundle everything into one package, forcing you to take HTTP clients when you only need a regex
 
-> 🚧 **Active development.** Core evidence chain and country classification are stable. VAT number validator is the current focus.
+This project takes a different approach: **two focused NuGet packages with zero external dependencies**, designed to be composed rather than consumed whole.
 
-## Roadmap
+---
 
-- [x] Country classification (EU / EEA / non-EU)
-- [x] Evidence hash-chain (append + verify)
-- [x] PostgreSQL persistence via EF Core
-- [x] Integration test infrastructure
-- [ ] **EU VAT number validator** ← current focus
-- [ ] Test data generator (fake transactions, VAT numbers, IP addresses)
-- [ ] REST API for evidence submission and chain verification
-- [ ] Export (CSV / PDF audit report)
+## Packages
 
-## Getting Started
+### `VatEvidence.Core`
 
-### Prerequisites
-
-- .NET 10
-- PostgreSQL 15+
-
-### Run locally
-
-```bash
-git clone https://github.com/your-username/eu-vat-evidence.git
-cd eu-vat-evidence
-
-# Set connection string
-export ConnectionStrings__Default="Host=localhost;Port=5432;Database=VatEvidence;Username=postgres;Password=postgres"
-
-dotnet restore
-dotnet ef database update --project VatEvidence.Infrastructure --startup-project VatEvidence.Web
-dotnet run --project VatEvidence.Web
-```
-
-### Run tests
-
-```bash
-dotnet test
-```
-
-Tests use [Testcontainers](https://testcontainers.com/) — Docker must be running.
-
-## Project Structure
-
-```
-VatEvidence.Domain/           # Entities, enums, CountryClassification
-VatEvidence.Application/      # Evidence hash-chain, append & verify services
-VatEvidence.Infrastructure/   # EF Core, PostgreSQL, migrations
-VatEvidence.Web/              # ASP.NET Core API
-VatEvidence.Test.Integration/ # Integration tests (xUnit + Testcontainers)
-```
-
-## Key Concepts
-
-### Country classification
+Local EU VAT number validation. No network calls, no external dependencies.
 
 ```csharp
-var ctx = CountryClassification.Classify("HR");
-
-ctx.IsValid  // true
-ctx.IsEu     // true
-ctx.IsEea    // true
-ctx.Code     // "HR"
-```
-
-### Evidence hash-chain
-
-Each evidence record is cryptographically linked to the previous one, forming a tamper-evident chain per transaction.
-
-```
-Record 1: hash = SHA256("v1|tx_id|timestamp|type|country|source||")
-Record 2: hash = SHA256("v1|tx_id|timestamp|type|country|source||record1_hash")
-Record 3: hash = SHA256("v1|tx_id|timestamp|type|country|source||record2_hash")
-```
-
-Verification checks that every hash and link in the chain is intact.
-
-### VAT number validator *(in progress)*
-
-```csharp
-// Coming soon
 var result = VatNumberValidator.Validate("HR12345678901");
-
-result.IsValid      // true / false
-result.CountryCode  // "HR"
-result.ErrorReason  // null or description of failure
+// VatValidationResult { IsValid, CountryCode, NormalizedVat, ErrorReason }
 ```
 
-Each EU member state has its own format rules and checksum algorithm. The validator will support all 27 EU member states.
+Covers all 27 EU member states with format validation and checksum verification where applicable (ISO 7064 MOD-11-10, MOD-97, MOD-11, Luhn). Results are deterministic, allocation-efficient, and safe to call from hot paths.
 
-## Tech Stack
+### `VatEvidence.Vies`
 
-- **Language:** C# / .NET 10
-- **Database:** PostgreSQL (EF Core + snake_case conventions)
-- **Testing:** xUnit, FluentAssertions, Testcontainers
-- **Hashing:** SHA-256
+EU VIES active-status verification. Calls the [EU Commission VIES REST API](https://ec.europa.eu/taxation_customs/vies/) to confirm whether a VAT number belongs to an active, registered business.
 
-## Contributing
+```csharp
+var vies = await viesClient.CheckAsync("HR", "12345678901", cancellationToken);
+// ViesResult { IsActive, Name, Address, RequestDate, ErrorReason }
+```
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
+Intentionally decoupled from `VatEvidence.Core` — take one, the other, or both.
 
-Good first issues:
-- Add VAT number validation for a specific EU country
-- Add test cases for edge-case country codes
-- Improve documentation
+---
+
+## Validation flow
+
+```
+Raw input: "HR12345678901"
+         │
+         ▼
+VatEvidence.Core                 ← fast, local, no network
+VatNumberValidator.Validate()
+         │
+    ┌────┴────┐
+  INVALID   VALID
+    │          │
+  return     VatEvidence.Vies    ← only if format passes
+  error      ViesClient.CheckAsync()
+                  │
+             IsActive, Name, Address
+```
+
+This two-step design means invalid numbers never reach the network, and VIES quota is not wasted on typos or test data.
+
+---
+
+## Stack
+
+- **.NET 10** — targeting current LTS
+- **ASP.NET Core Minimal API** — reference implementation
+- **PostgreSQL + EF Core** — snake_case conventions, append-only evidence records
+- **Clean Architecture** — Domain / Application / Infrastructure / Web
+- **xUnit + Testcontainers** — unit tests per country, integration tests with real PostgreSQL
+
+---
+
+## Project structure
+
+```
+eu-vat-evidence/
+│
+├── src/
+│   ├── VatEvidence.Core/          # NuGet — validator, country classification
+│   └── VatEvidence.Vies/          # NuGet — VIES HTTP client
+│
+├── VatEvidence.Domain/            # EvidenceRecord, hash-chain (SHA-256)
+├── VatEvidence.Application/       # Use cases, MediatR handlers
+├── VatEvidence.Infrastructure/    # EF Core, PostgreSQL, migrations
+├── VatEvidence.Web/               # Minimal API reference implementation
+│
+├── VatEvidence.Test.Unit/         # Per-country validator tests
+└── VatEvidence.Test.Integration/  # Testcontainers, VIES mock
+```
+
+---
+
+## Country coverage
+
+All 27 EU member states, validated against official EU VAT format specifications:
+
+| Prefix | Country | Checksum |
+|--------|---------|----------|
+| AT | Austria | — |
+| BE | Belgium | MOD-97 |
+| BG | Bulgaria | — |
+| CY | Cyprus | — |
+| CZ | Czech Republic | — |
+| DE | Germany | MOD-11-10 |
+| DK | Denmark | MOD-11 |
+| EE | Estonia | — |
+| EL | Greece | MOD-11 |
+| ES | Spain | — |
+| FI | Finland | MOD-11 |
+| FR | France | — |
+| HR | Croatia | ISO 7064 MOD-11-10 |
+| HU | Hungary | — |
+| IE | Ireland | — |
+| IT | Italy | Luhn |
+| LT | Lithuania | — |
+| LU | Luxembourg | MOD-89 |
+| LV | Latvia | — |
+| MT | Malta | — |
+| NL | Netherlands | — |
+| PL | Poland | Weighted |
+| PT | Portugal | — |
+| RO | Romania | — |
+| SE | Sweden | — |
+| SI | Slovenia | MOD-11 |
+| SK | Slovakia | MOD-11 |
+
+---
+
+## Getting started
+
+```bash
+dotnet add package VatEvidence.Core
+dotnet add package VatEvidence.Vies   # optional
+```
+
+```csharp
+// Step 1 — local validation, always
+var result = VatNumberValidator.Validate(rawInput);
+
+if (!result.IsValid)
+    return BadRequest(result.ErrorReason);
+
+// Step 2 — VIES check, only when needed
+var vies = await _viesClient.CheckAsync(
+    result.CountryCode!,
+    result.NormalizedVat![2..],
+    cancellationToken);
+```
+
+Register VIES client in DI:
+
+```csharp
+builder.Services.AddHttpClient<IViesClient, ViesClient>();
+```
+
+---
+
+## Evidence records
+
+Beyond validation, the project maintains an append-only SHA-256 hash-chain of VAT check events — designed for audit trails in invoicing and compliance systems where you need to prove a VAT number was valid at the time of a transaction.
+
+---
 
 ## License
 
-[MIT](LICENSE)
+MIT — see [LICENSE](LICENSE).
+
+---
+
+## JetBrains Open Source
+
+This project is developed with the support of a [JetBrains Open Source license](https://www.jetbrains.com/community/opensource/). JetBrains supports open-source developers with free access to their professional tools.

@@ -1,13 +1,13 @@
 # Evidence Sequence Migration - Quick Guide
 
-## Primjena migracije
+## Applying the migration
 
-### 1. Provjeri pending migracije
+### 1. Check pending migrations
 ```bash
 dotnet ef migrations list --project VatEvidence.Infrastructure --startup-project VatEvidence.Web
 ```
 
-Trebalo bi vidjeti:
+You should see:
 ```
 20260129161251_InitialWithSnakeCase (Applied)
 20260202200000_AddEvidenceSequenceAndIdempotency (Pending)
@@ -18,22 +18,22 @@ Trebalo bi vidjeti:
 dotnet ef database update --project VatEvidence.Infrastructure --startup-project VatEvidence.Web
 ```
 
-### 3. Verifikacija
+### 3. Verification
 
-Provjeri da li je `sequence` column kreiran i backfilled:
+Verify that the `sequence` column was created and backfilled:
 ```sql
--- Provjeri strukturu
+-- Check the structure
 SELECT column_name, data_type, is_nullable 
 FROM information_schema.columns 
 WHERE table_name = 'evidence_records' 
 AND column_name = 'sequence';
 
--- Provjeri da li postoje vrijednosti
+-- Check whether values exist
 SELECT transaction_id, sequence, captured_utc, evidence_type
 FROM evidence_records
 ORDER BY transaction_id, sequence;
 
--- Provjeri indexe
+-- Check indexes
 SELECT indexname, indexdef 
 FROM pg_indexes 
 WHERE tablename = 'evidence_records';
@@ -53,18 +53,18 @@ O?ekivani indexi:
 dotnet ef database update 20260129161251_InitialWithSnakeCase --project VatEvidence.Infrastructure --startup-project VatEvidence.Web
 ```
 
-**UPOZORENJE**: Ovo ?e obrisati:
+**WARNING**: This will remove:
 - `sequence` column
 - `ux_evidence_records_tx_sequence` index
 - `ux_evidence_records_tx_type_source` index
 
-Ali ne?e obrisati postoje?e evidence zapise.
+But it will not delete existing evidence records.
 
 ---
 
-## Test scenariji nakon migracije
+## Test scenarios after migration
 
-### Test 1: Provjeri da sequence radi
+### Test 1: Check that sequence works
 ```bash
 # Pošalji webhook (koristi webhook-stripe.http fajl)
 POST http://localhost:5000/api/webhooks/stripe/test?workspace_id=YOUR_WORKSPACE_ID
@@ -78,7 +78,7 @@ WHERE transaction_id = 'TRANSACTION_ID'
 ORDER BY sequence;
 ```
 
-Trebalo bi vidjeti:
+You should see:
 ```
 sequence | evidence_type | source_ref
 ---------|---------------|------------
@@ -86,26 +86,27 @@ sequence | evidence_type | source_ref
 2        | 1 (IP)        | evt_123...
 ```
 
-### Test 2: Provjeri idempotency (dupli webhook)
+### Test 2: Check idempotency (duplicate webhook)
 ```bash
 # Pošalji isti webhook 2x sa istim evt_id
 POST http://localhost:5000/api/webhooks/stripe/test?workspace_id=YOUR_WORKSPACE_ID
 (isti payload)
 ```
 
-Rezultat:
-- Prvi: Status 200, kreira sve zapise
-- Drugi: Status 200, vra?a "Duplicate event", NE kreira dupli evidence
 
-Provjeri DB:
+Result:
+- First: HTTP 200, creates all records
+- Second: HTTP 200, returns "Duplicate event", DOES NOT create duplicate evidence
+
+Check DB:
 ```sql
 SELECT COUNT(*) FROM evidence_records WHERE source_ref = 'evt_123...';
--- Trebalo bi biti 2 (Billing + IP), NE 4
+Should be 2 (Billing + IP), NOT 4
 ```
 
-### Test 3: Provjeri retry failanog event-a
+### Test 3: Check retry of a failed event
 ```sql
--- Ru?no ozna?i event kao Failed
+-- Manually mark the event as Failed
 UPDATE provider_events 
 SET processing_status = 2 -- Failed
 WHERE provider_event_id = 'evt_123...';
@@ -144,7 +145,7 @@ Prije deploy-a u produkciju:
 
 **Rješenje**:
 ```sql
--- Prona?i duplikate
+-- Find duplicates
 SELECT transaction_id, evidence_type, source_ref, COUNT(*) 
 FROM evidence_records 
 GROUP BY transaction_id, evidence_type, source_ref 
@@ -165,7 +166,7 @@ WHERE id NOT IN (
 
 **Rješenje**:
 ```sql
--- Ru?no backfill
+-- Manual backfill
 WITH ordered AS (
   SELECT 
     id, 
@@ -200,6 +201,6 @@ await _db.FromSqlInterpolated<Transaction>($@"
 
 ---
 
-**Kreirao**: GitHub Copilot  
-**Datum**: 2025-02-02  
-**Migracija**: `20260202200000_AddEvidenceSequenceAndIdempotency`
+**Created by**: GitHub Copilot  
+**Date**: 2025-02-02  
+**Migration**: `20260202200000_AddEvidenceSequenceAndIdempotency`
