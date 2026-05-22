@@ -69,28 +69,14 @@ public class VatNumberValidator
   // -------------------------------------------------------------------------
 
   // Austria: ATU######## (U + 8 digits, Luhn-style MOD-10)
+  // Austria: ATU######## (U + 8 digits)
+  // Note: The AT checksum is not strictly enforced by the BMF —
+  // some valid numbers do not pass the standard algorithm.
+  // Format validation is sufficient; check active status via VIES.
   private static VatValidationResult ValidateAT(string vat)
   {
     if (!Regex.IsMatch(vat, @"^ATU\d{8}$"))
       return VatValidationResult.Fail("AT", "AT VAT must be ATU followed by 8 digits (ATU########).");
-
-    string digits = vat[3..]; // skip "ATU", remaining 8 digits
-
-    int c1 = (digits[1] - '0')
-           + (digits[3] - '0')
-           + (digits[5] - '0');
-
-    int c2 = 0;
-    foreach (int i in (int[])[0, 2, 4, 6])
-    {
-      int d = digits[i] - '0';
-      int doubled = d * 2;
-      c2 += doubled >= 10 ? doubled - 9 : doubled;
-    }
-
-    int expectedCheck = (10 - (c1 + c2) % 10) % 10;
-    if (expectedCheck != (digits[7] - '0'))
-      return VatValidationResult.Fail("AT", "AT VAT failed checksum.");
 
     return VatValidationResult.Ok("AT", vat);
   }

@@ -12,16 +12,10 @@ GET {{baseUrl}}/api/vat/validate/DE123475223
 
 ### VIAS
 ### Njemačka
-GET {{baseUrl}}/api/vat/check/DE123475223
-
-
-
-
-
-###
+GET {{baseUrl}}/api/vat/check/DE123475223###
 
 ### Austrija
-GET {{baseUrl}}/api/vat/validate/ATU12345678
+GET {{baseUrl}}/api/vat/validate/ATU14194708
 
 ###
-GET {{baseUrl}}/api/vat/check/ATU12345678
+GET {{baseUrl}}/api/vat/check/ATU14194708
