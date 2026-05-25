@@ -73,6 +73,9 @@ public class VatNumberValidator
   // Note: The AT checksum is not strictly enforced by the BMF —
   // some valid numbers do not pass the standard algorithm.
   // Format validation is sufficient; check active status via VIES.
+  // Austria: ATU######## (U + 8 digits)
+  // AT (BMF) izdaje brojeve koji ne prate standardni checksum algoritam —
+  // format validacija je dovoljna; aktivan status provjeri putem VIES-a.
   private static VatValidationResult ValidateAT(string vat)
   {
     if (!Regex.IsMatch(vat, @"^ATU\d{8}$"))
@@ -80,6 +83,7 @@ public class VatNumberValidator
 
     return VatValidationResult.Ok("AT", vat);
   }
+  
 
   // Belgium: BE0#########  (0 + 9 digits)
   private static VatValidationResult ValidateBE(string vat)
