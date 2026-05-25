@@ -164,8 +164,3 @@ Beyond validation, the project maintains an append-only SHA-256 hash-chain of VA
 
 MIT — see [LICENSE](LICENSE).
 
----
-
-## JetBrains Open Source
-
-This project is developed with the support of a [JetBrains Open Source license](https://www.jetbrains.com/community/opensource/). JetBrains supports open-source developers with free access to their professional tools.

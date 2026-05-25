@@ -1,4 +1,4 @@
-# eu-vat-evidence
+﻿# eu-vat-evidence
 
 **Open-source .NET library for EU VAT number validation and compliance evidence.**
 
