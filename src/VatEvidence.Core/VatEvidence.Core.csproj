@@ -13,9 +13,13 @@
     <PackageTags>vat;eu;validation;tax;invoice</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <RepositoryUrl>https://github.com/you/eu-vat-evidence</RepositoryUrl>
+    <RepositoryUrl>https://github.com/david-kolundzic/eu-vat-evidence</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
 
 </Project>
