@@ -1,3 +1,5 @@
+[![CI](https://github.com/davidkolundzic/eu-vat-evidence/actions/workflows/ci.yml/badge.svg)](https://github.com/davidkolundzic/eu-vat-evidence/actions/workflows/ci.yml)
+
 # eu-vat-evidence
 
 **Open-source .NET library for EU VAT number validation and compliance evidence.**
@@ -163,4 +165,3 @@ Beyond validation, the project maintains an append-only SHA-256 hash-chain of VA
 ## License
 
 MIT — see [LICENSE](LICENSE).
-
