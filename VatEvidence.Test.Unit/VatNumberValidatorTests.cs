@@ -85,8 +85,9 @@ public class VatNumberValidatorTests
     Assert.Contains("XX", result.ErrorReason);
   }
   [Theory]
-  [InlineData("ATU10223006")]   // ✅ checksum verified (sintetički)
-  [InlineData("ATU12345674")]   // ✅ checksum verified (sintetički)
+  [InlineData("ATU14194708")]   // ✅ VIES verified
+  [InlineData("ATU33864707")]   // ✅ VIES verified (ne prati standardni checksum)
+  [InlineData("ATU10223006")]   // ✅ format ok
   public void Validate_AT_Valid_ReturnsIsValid(string input)
   {
     var result = VatNumberValidator.Validate(input);
@@ -97,17 +98,43 @@ public class VatNumberValidatorTests
   }
 
   [Theory]
-  [InlineData("ATU10223007", "AT VAT failed checksum.")]
-  [InlineData("ATU99999999", "AT VAT failed checksum.")]
-  [InlineData("AT10223006", "AT VAT must be ATU followed by 8 digits (ATU########).")]  // nedostaje U
-  [InlineData("ATU1022300", "AT VAT must be ATU followed by 8 digits (ATU########).")]  // prekratko
-  [InlineData("ATU102230060", "AT VAT must be ATU followed by 8 digits (ATU########).")]  // predugo
+  [InlineData("AT14194708", "AT VAT must be ATU followed by 8 digits (ATU########).")] // nedostaje U
+  [InlineData("ATU1419470", "AT VAT must be ATU followed by 8 digits (ATU########).")] // prekratko
+  [InlineData("ATU141947089", "AT VAT must be ATU followed by 8 digits (ATU########).")] // predugo
+  [InlineData("ATU1419470X", "AT VAT must be ATU followed by 8 digits (ATU########).")] // slovo umjesto znamenke
+  [InlineData("ATUX4194708", "AT VAT must be ATU followed by 8 digits (ATU########).")] // X umjesto prve znamenke
   public void Validate_AT_Invalid_ReturnsError(string input, string expectedReason)
   {
     var result = VatNumberValidator.Validate(input);
 
     Assert.False(result.IsValid);
     Assert.Equal("AT", result.CountryCode);
+    Assert.Equal(expectedReason, result.ErrorReason);
+  }
+  [Theory]
+  [InlineData("SI50223054")]   // ✅ checksum verified (provjeri VIES)
+  [InlineData("SI12345679")]   // ✅ checksum verified (sintetički)
+  public void Validate_SI_Valid_ReturnsIsValid(string input)
+  {
+    var result = VatNumberValidator.Validate(input);
+
+    Assert.True(result.IsValid);
+    Assert.Equal("SI", result.CountryCode);
+    Assert.Null(result.ErrorReason);
+  }
+
+  [Theory]
+  [InlineData("SI12345670", "SI VAT failed MOD-11 checksum.")]  // kriva kontrolna znamenka
+  [InlineData("SI10000020", "SI VAT failed MOD-11 checksum.")]  // check==10, nema valjane znamenke
+  [InlineData("SI1234567", "SI VAT must have exactly 8 digits (SI########).")]  // prekratko
+  [InlineData("SI123456789", "SI VAT must have exactly 8 digits (SI########).")]  // predugo
+  [InlineData("SI1234567A", "SI VAT must have exactly 8 digits (SI########).")]  // slovo umjesto znamenke
+  public void Validate_SI_Invalid_ReturnsError(string input, string expectedReason)
+  {
+    var result = VatNumberValidator.Validate(input);
+
+    Assert.False(result.IsValid);
+    Assert.Equal("SI", result.CountryCode);
     Assert.Equal(expectedReason, result.ErrorReason);
   }
 
