@@ -1,21 +1,34 @@
-# For more info on HTTP files go to https://aka.ms/vs/httpfile
+# VAT API manual smoke tests
+# Format validation = no network
+# VIES check = live external check
+
 @baseUrl = https://localhost:7297
 
-## Korak 1 - Format validacija  (bez mreže)
-GET {{baseUrl}}/api/vat/validate/HR43118119983
-### VIAS
-GET {{baseUrl}}/api/vat/check/HR43118119983
+@hrVat = HR43118119983
+@deVat = DE123475223
+@atVat = ATU14194708
+@siVat = SI80267432
 
-### local 
-### DE
-GET {{baseUrl}}/api/vat/validate/DE123475223
+### HR - format validation only
+GET {{baseUrl}}/api/vat/validate/{{hrVat}}
+### HR - format + VIES live check
+GET {{baseUrl}}/api/vat/check/{{hrVat}}
 
-### VIAS
-### Njemačka
-GET {{baseUrl}}/api/vat/check/DE123475223###
+### DE - format validation only
+GET {{baseUrl}}/api/vat/validate/{{deVat}}
 
-### Austrija
-GET {{baseUrl}}/api/vat/validate/ATU14194708
+### DE - format + VIES live check
+GET {{baseUrl}}/api/vat/check/{{deVat}}
 
-###
-GET {{baseUrl}}/api/vat/check/ATU14194708
+
+### AT - format validation only
+GET {{baseUrl}}/api/vat/validate/{{atVat}}
+
+### AT - format + VIES live check
+GET {{baseUrl}}/api/vat/check/{{atVat}}
+
+### SI - format validation only
+GET {{baseUrl}}/api/vat/validate/{{siVat}}
+
+### SI - format + VIES live check
+GET {{baseUrl}}/api/vat/check/{{siVat}}
