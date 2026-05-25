@@ -68,11 +68,9 @@ This two-step design means invalid numbers never reach the network, and VIES quo
 
 ## Stack
 
-- **.NET 10** — targeting current LTS
+- **.NET 10**
 - **ASP.NET Core Minimal API** — reference implementation
-- **PostgreSQL + EF Core** — snake_case conventions, append-only evidence records
-- **Clean Architecture** — Domain / Application / Infrastructure / Web
-- **xUnit + Testcontainers** — unit tests per country, integration tests with real PostgreSQL
+- **xUnit** — per-country unit tests
 
 ---
 
@@ -82,16 +80,11 @@ This two-step design means invalid numbers never reach the network, and VIES quo
 eu-vat-evidence/
 │
 ├── src/
-│   ├── VatEvidence.Core/          # NuGet — validator, country classification
-│   └── VatEvidence.Vies/          # NuGet — VIES HTTP client
+│   ├── VatEvidence.Core/      # NuGet — validator, country classification
+│   └── VatEvidence.Vies/      # NuGet — VIES HTTP client
 │
-├── VatEvidence.Domain/            # EvidenceRecord, hash-chain (SHA-256)
-├── VatEvidence.Application/       # Use cases, MediatR handlers
-├── VatEvidence.Infrastructure/    # EF Core, PostgreSQL, migrations
-├── VatEvidence.Web/               # Minimal API reference implementation
-│
-├── VatEvidence.Test.Unit/         # Per-country validator tests
-└── VatEvidence.Test.Integration/  # Testcontainers, VIES mock
+├── VatEvidence.Web/           # Minimal API reference implementation
+└── VatEvidence.Test.Unit/     # Per-country validator tests
 ```
 
 ---
