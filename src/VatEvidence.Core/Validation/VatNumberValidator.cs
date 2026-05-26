@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -26,15 +26,15 @@ public class VatNumberValidator
     if (vat.Length < 4)
       return VatValidationResult.Fail(null, "VAT number is too short.");
 
-    if (!Regex.IsMatch(vat[..2], @"^[A-Z]{2}$"))
+    if (!Regexes._twoLetterPrefixPattern.IsMatch(vat[..2]))
       return VatValidationResult.Fail(null, "VAT number must start with a 2-letter country prefix.");
 
     var prefix = vat[..2];
 
     return prefix switch
     {
-      "AT" => ValidateAT(vat),
-      "BE" => ValidateBE(vat),
+      "AT" => ValidateAT(vat), 
+      "BE" => ValidateBE(vat),    
       "BG" => ValidateBG(vat),
       "CY" => ValidateCY(vat),
       "CZ" => ValidateCZ(vat),
@@ -45,7 +45,7 @@ public class VatNumberValidator
       "ES" => ValidateES(vat),
       "FI" => ValidateFI(vat),
       "FR" => ValidateFR(vat),
-      "HR" => ValidateHR(vat),
+      "HR" => ValidateHR(vat), 
       "HU" => ValidateHU(vat),
       "IE" => ValidateIE(vat),
       "IT" => ValidateIT(vat),
@@ -64,6 +64,10 @@ public class VatNumberValidator
     };
   }
 
+
+
+
+
   // -------------------------------------------------------------------------
   // EU member state validators
   // -------------------------------------------------------------------------
@@ -78,21 +82,21 @@ public class VatNumberValidator
   // format validacija je dovoljna; aktivan status provjeri putem VIES-a.
   private static VatValidationResult ValidateAT(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^ATU\d{8}$"))
+    if (!Regexes._atPattern.IsMatch(vat))
       return VatValidationResult.Fail("AT", "AT VAT must be ATU followed by 8 digits (ATU########).");
 
     return VatValidationResult.Ok("AT", vat);
   }
-  
+
 
   // Belgium: BE0#########  (0 + 9 digits)
   private static VatValidationResult ValidateBE(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^BE0\d{9}$"))
+    if (!Regexes._bePattern.IsMatch(vat))
       return VatValidationResult.Fail("BE", "BE VAT must be BE0 followed by 9 digits (BE0#########).");
 
     // MOD-97 checksum: last 2 digits = 97 - (first 8 digits MOD 97)
-    var digits = vat[2..]; // 10 chars: 0 + 9 digits
+    var digits = vat.AsSpan(2); // 10 chars: 0 + 9 digits
     var number = long.Parse(digits[..8]);
     var check = int.Parse(digits[8..]);
     if (97 - (number % 97) != check)
@@ -103,7 +107,7 @@ public class VatNumberValidator
   // Bulgaria: BG######### or BG##########  (9 or 10 digits)
   private static VatValidationResult ValidateBG(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^BG\d{9,10}$"))
+    if (!Regexes._bgPattern.IsMatch(vat))
       return VatValidationResult.Fail("BG", "BG VAT must have 9 or 10 digits (BG#########).");
     return VatValidationResult.Ok("BG", vat);
   }
@@ -111,7 +115,7 @@ public class VatNumberValidator
   // Cyprus: CY########L  (8 digits + 1 letter)
   private static VatValidationResult ValidateCY(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^CY\d{8}[A-Z]$"))
+    if (!Regexes._cyPattern.IsMatch(vat))
       return VatValidationResult.Fail("CY", "CY VAT must be 8 digits followed by a letter (CY########L).");
     return VatValidationResult.Ok("CY", vat);
   }
@@ -119,7 +123,7 @@ public class VatNumberValidator
   // Czech Republic: CZ######## or CZ######### or CZ##########  (8–10 digits)
   private static VatValidationResult ValidateCZ(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^CZ\d{8,10}$"))
+    if (!Regexes._czPattern.IsMatch(vat))
       return VatValidationResult.Fail("CZ", "CZ VAT must have 8 to 10 digits (CZ########).");
     return VatValidationResult.Ok("CZ", vat);
   }
@@ -127,7 +131,7 @@ public class VatNumberValidator
   // Germany: DE######### (9 digits, recursive MOD-11)
   private static VatValidationResult ValidateDE(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^DE\d{9}$"))
+    if (!Regexes._dePattern.IsMatch(vat))
       return VatValidationResult.Fail("DE", "DE VAT must have exactly 9 digits (DE#########).");
 
     string digits = vat[2..]; // "129274202" — all 9 digits
@@ -141,12 +145,12 @@ public class VatNumberValidator
     return VatValidationResult.Ok("DE", vat);
   }
 
-  
+
 
   // Denmark: DK########  (8 digits, MOD-11)
   private static VatValidationResult ValidateDK(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^DK\d{8}$"))
+    if (!Regexes._dkPattern.IsMatch(vat))
       return VatValidationResult.Fail("DK", "DK VAT must have exactly 8 digits (DK########).");
 
     int[] weights = [2, 7, 6, 5, 4, 3, 2, 1];
@@ -160,7 +164,7 @@ public class VatNumberValidator
   // Estonia: EE#########  (9 digits)
   private static VatValidationResult ValidateEE(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^EE\d{9}$"))
+    if (!Regexes._eePattern.IsMatch(vat))
       return VatValidationResult.Fail("EE", "EE VAT must have exactly 9 digits (EE#########).");
     return VatValidationResult.Ok("EE", vat);
   }
@@ -168,7 +172,7 @@ public class VatNumberValidator
   // Greece: EL#########  (9 digits, MOD-11)
   private static VatValidationResult ValidateEL(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^EL\d{9}$"))
+    if (!Regexes._elPattern.IsMatch(vat))
       return VatValidationResult.Fail("EL", "EL (Greece) VAT must have exactly 9 digits (EL#########).");
 
     int[] weights = [256, 128, 64, 32, 16, 8, 4, 2];
@@ -183,7 +187,7 @@ public class VatNumberValidator
   // Spain: ES[X]#######[X]  (letter or digit at start and end)
   private static VatValidationResult ValidateES(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^ES[A-Z0-9]\d{7}[A-Z0-9]$"))
+    if (!Regexes._esPattern.IsMatch(vat))
       return VatValidationResult.Fail("ES", "ES VAT format: ES[X]#######[X] (ESA12345678 or ES12345678A).");
     return VatValidationResult.Ok("ES", vat);
   }
@@ -191,7 +195,7 @@ public class VatNumberValidator
   // Finland: FI########  (8 digits, MOD-11)
   private static VatValidationResult ValidateFI(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^FI\d{8}$"))
+    if (!Regexes._fiPattern.IsMatch(vat))
       return VatValidationResult.Fail("FI", "FI VAT must have exactly 8 digits (FI########).");
 
     int[] weights = [7, 9, 10, 5, 8, 4, 2];
@@ -207,7 +211,7 @@ public class VatNumberValidator
   // France: FR[XX]#########  (2 alphanum chars + 9 digits)
   private static VatValidationResult ValidateFR(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^FR[A-Z0-9]{2}\d{9}$"))
+    if (!Regexes._frPattern.IsMatch(vat))
       return VatValidationResult.Fail("FR", "FR VAT format: FR[XX]######### (FRXX123456789).");
     return VatValidationResult.Ok("FR", vat);
   }
@@ -215,10 +219,10 @@ public class VatNumberValidator
   // Croatia: HR###########  (11 digits, ISO 7064 MOD-11-10)
   private static VatValidationResult ValidateHR(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^HR\d{11}$"))
+    if (!Regexes._hrPattern.IsMatch(vat))
       return VatValidationResult.Fail("HR", "HR VAT must have exactly 11 digits (HR###########).");
 
-    if (!CheckMod1110(vat[2..12], int.Parse(vat[12].ToString())))
+    if (!CheckMod1110(vat.AsSpan(2, 10), int.Parse(vat[12].ToString())))
       return VatValidationResult.Fail("HR", "HR VAT failed ISO 7064 MOD-11-10 checksum.");
 
     return VatValidationResult.Ok("HR", vat);
@@ -227,7 +231,7 @@ public class VatNumberValidator
   // Hungary: HU########  (8 digits)
   private static VatValidationResult ValidateHU(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^HU\d{8}$"))
+    if (!Regexes._huPattern.IsMatch(vat))
       return VatValidationResult.Fail("HU", "HU VAT must have exactly 8 digits (HU########).");
     return VatValidationResult.Ok("HU", vat);
   }
@@ -236,7 +240,7 @@ public class VatNumberValidator
   private static VatValidationResult ValidateIE(string vat)
   {
     // Old format: IE#A#####L, new format: IE########, IE#######LL
-    if (!Regex.IsMatch(vat, @"^IE(\d{7}[A-Z]{1,2}|\d[A-Z+*]\d{5}[A-Z])$"))
+    if (!Regexes._iePattern.IsMatch(vat))
       return VatValidationResult.Fail("IE", "IE VAT format: IE#######L or IE#######LL or IE#A#####L.");
     return VatValidationResult.Ok("IE", vat);
   }
@@ -244,7 +248,7 @@ public class VatNumberValidator
   // Italy: IT###########  (11 digits)
   private static VatValidationResult ValidateIT(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^IT\d{11}$"))
+    if (!Regexes._itPattern.IsMatch(vat))
       return VatValidationResult.Fail("IT", "IT VAT must have exactly 11 digits (IT###########).");
 
     // Luhn-style checksum
@@ -270,7 +274,7 @@ public class VatNumberValidator
   // Lithuania: LT#########  or LT############  (9 or 12 digits)
   private static VatValidationResult ValidateLT(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^LT(\d{9}|\d{12})$"))
+    if (!Regexes._ltPattern.IsMatch(vat))
       return VatValidationResult.Fail("LT", "LT VAT must have 9 or 12 digits (LT#########).");
     return VatValidationResult.Ok("LT", vat);
   }
@@ -278,7 +282,7 @@ public class VatNumberValidator
   // Luxembourg: LU########  (8 digits)
   private static VatValidationResult ValidateLU(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^LU\d{8}$"))
+    if (!Regexes._luPattern.IsMatch(vat))
       return VatValidationResult.Fail("LU", "LU VAT must have exactly 8 digits (LU########).");
 
     var number = int.Parse(vat[2..8]);
@@ -292,7 +296,7 @@ public class VatNumberValidator
   // Latvia: LV###########  (11 digits)
   private static VatValidationResult ValidateLV(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^LV\d{11}$"))
+    if (!Regexes._lvPattern.IsMatch(vat))
       return VatValidationResult.Fail("LV", "LV VAT must have exactly 11 digits (LV###########).");
     return VatValidationResult.Ok("LV", vat);
   }
@@ -300,7 +304,7 @@ public class VatNumberValidator
   // Malta: MT########  (8 digits)
   private static VatValidationResult ValidateMT(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^MT\d{8}$"))
+    if (!Regexes._mtPattern.IsMatch(vat))
       return VatValidationResult.Fail("MT", "MT VAT must have exactly 8 digits (MT########).");
     return VatValidationResult.Ok("MT", vat);
   }
@@ -308,7 +312,7 @@ public class VatNumberValidator
   // Netherlands: NL#########B##  (9 digits + B + 2 digits)
   private static VatValidationResult ValidateNL(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^NL\d{9}B\d{2}$"))
+    if (!Regexes._nlPattern.IsMatch(vat))
       return VatValidationResult.Fail("NL", "NL VAT format: NL#########B## (NL123456789B01).");
     return VatValidationResult.Ok("NL", vat);
   }
@@ -316,7 +320,7 @@ public class VatNumberValidator
   // Poland: PL##########  (10 digits, weighted checksum)
   private static VatValidationResult ValidatePL(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^PL\d{10}$"))
+    if (!Regexes._plPattern.IsMatch(vat))
       return VatValidationResult.Fail("PL", "PL VAT must have exactly 10 digits (PL##########).");
 
     int[] weights = [6, 5, 7, 2, 3, 4, 5, 6, 7];
@@ -331,7 +335,7 @@ public class VatNumberValidator
   // Portugal: PT#########  (9 digits)
   private static VatValidationResult ValidatePT(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^PT\d{9}$"))
+    if (!Regexes._ptPattern.IsMatch(vat))
       return VatValidationResult.Fail("PT", "PT VAT must have exactly 9 digits (PT#########).");
     return VatValidationResult.Ok("PT", vat);
   }
@@ -339,7 +343,7 @@ public class VatNumberValidator
   // Romania: RO##  to RO##########  (2–10 digits)
   private static VatValidationResult ValidateRO(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^RO\d{2,10}$"))
+    if (!Regexes._roPattern.IsMatch(vat))
       return VatValidationResult.Fail("RO", "RO VAT must have 2 to 10 digits (RO##########).");
     return VatValidationResult.Ok("RO", vat);
   }
@@ -347,7 +351,7 @@ public class VatNumberValidator
   // Sweden: SE############  (12 digits)
   private static VatValidationResult ValidateSE(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^SE\d{12}$"))
+    if (!Regexes._sePattern.IsMatch(vat))
       return VatValidationResult.Fail("SE", "SE VAT must have exactly 12 digits (SE############).");
     return VatValidationResult.Ok("SE", vat);
   }
@@ -355,7 +359,7 @@ public class VatNumberValidator
   // Slovenia: SI########  (8 digits, MOD-11)
   private static VatValidationResult ValidateSI(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^SI\d{8}$"))
+    if (!Regexes._siPattern.IsMatch(vat))
       return VatValidationResult.Fail("SI", "SI VAT must have exactly 8 digits (SI########).");
 
     int[] weights = [8, 7, 6, 5, 4, 3, 2];
@@ -370,13 +374,47 @@ public class VatNumberValidator
   // Slovakia: SK##########  (10 digits)
   private static VatValidationResult ValidateSK(string vat)
   {
-    if (!Regex.IsMatch(vat, @"^SK\d{10}$"))
+    if (!Regexes._skPattern.IsMatch(vat))
       return VatValidationResult.Fail("SK", "SK VAT must have exactly 10 digits (SK##########).");
 
     if (long.Parse(vat[2..]) % 11 != 0)
       return VatValidationResult.Fail("SK", "SK VAT failed MOD-11 checksum.");
 
     return VatValidationResult.Ok("SK", vat);
+  }
+
+  private static class Regexes
+  {
+    private static readonly RegexOptions _commonOptions = RegexOptions.Compiled | RegexOptions.CultureInvariant;
+
+    public static readonly Regex _twoLetterPrefixPattern = new("^[A-Z]{2}$", _commonOptions);
+    public static readonly Regex _atPattern = new("^ATU\\d{8}$", _commonOptions);
+    public static readonly Regex _bePattern = new("^BE0\\d{9}$", _commonOptions);
+    public static readonly Regex _bgPattern = new("^BG\\d{9,10}$", _commonOptions);
+    public static readonly Regex _cyPattern = new("^CY\\d{8}[A-Z]$", _commonOptions);
+    public static readonly Regex _czPattern = new("^CZ\\d{8,10}$", _commonOptions);
+    public static readonly Regex _dePattern = new("^DE\\d{9}$", _commonOptions);
+    public static readonly Regex _dkPattern = new("^DK\\d{8}$", _commonOptions);
+    public static readonly Regex _eePattern = new("^EE\\d{9}$", _commonOptions);
+    public static readonly Regex _elPattern = new("^EL\\d{9}$", _commonOptions);
+    public static readonly Regex _esPattern = new("^ES[A-Z0-9]\\d{7}[A-Z0-9]$", _commonOptions);
+    public static readonly Regex _fiPattern = new("^FI\\d{8}$", _commonOptions);
+    public static readonly Regex _frPattern = new("^FR[A-Z0-9]{2}\\d{9}$", _commonOptions);
+    public static readonly Regex _hrPattern = new("^HR\\d{11}$", _commonOptions);
+    public static readonly Regex _huPattern = new("^HU\\d{8}$", _commonOptions);
+    public static readonly Regex _iePattern = new("^IE(\\d[A-Z]\\d{5}[A-Z]|\\d{7}[A-Z]{1,2})$", _commonOptions);
+    public static readonly Regex _itPattern = new("^IT\\d{11}$", _commonOptions);
+    public static readonly Regex _ltPattern = new("^LT(\\d{9}|\\d{12})$", _commonOptions);
+    public static readonly Regex _luPattern = new("^LU\\d{8}$", _commonOptions);
+    public static readonly Regex _lvPattern = new("^LV\\d{11}$", _commonOptions);
+    public static readonly Regex _mtPattern = new("^MT\\d{8}$", _commonOptions);
+    public static readonly Regex _nlPattern = new("^NL\\d{9}B\\d{2}$", _commonOptions);
+    public static readonly Regex _plPattern = new("^PL\\d{10}$", _commonOptions);
+    public static readonly Regex _ptPattern = new("^PT\\d{9}$", _commonOptions);
+    public static readonly Regex _roPattern = new("^RO\\d{2,10}$", _commonOptions);
+    public static readonly Regex _sePattern = new("^SE\\d{12}$", _commonOptions);
+    public static readonly Regex _siPattern = new("^SI\\d{8}$", _commonOptions);
+    public static readonly Regex _skPattern = new("^SK\\d{10}$", _commonOptions);
   }
 
   // -------------------------------------------------------------------------
@@ -399,7 +437,7 @@ public class VatNumberValidator
     var expected = 11 - product;
     return expected == 10 ? checkDigit == 0 : checkDigit == expected;
   }
-  private static bool CheckDeRecursiveMod11(string digits)
+  private static bool CheckDeRecursiveMod11(ReadOnlySpan<char> digits)
   {
     int p = 10;
     for (int i = 0; i < 8; i++)
@@ -415,4 +453,3 @@ public class VatNumberValidator
     return (digits[8] - '0') == expected;
   }
 }
-

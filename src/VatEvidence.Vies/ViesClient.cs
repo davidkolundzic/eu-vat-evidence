@@ -12,9 +12,13 @@ public sealed class ViesClient : IViesClient
   private readonly HttpClient _http;
 
   // EU Commission VIES REST API (available since 2022)
-  private const string BaseUrl =
+  private const string _baseUrl =
       "https://ec.europa.eu/taxation_customs/vies/rest-api/ms/{0}/vat/{1}";
 
+  /// <summary>
+  /// Initializes a new instance of the ViesClient with the provided HttpClient.
+  /// </summary>
+  /// <param name="http">The HttpClient instance to use for making requests.</param>
   public ViesClient(HttpClient http)
   {
     _http = http;
@@ -30,7 +34,7 @@ public sealed class ViesClient : IViesClient
     ArgumentException.ThrowIfNullOrWhiteSpace(countryCode);
     ArgumentException.ThrowIfNullOrWhiteSpace(vatNumber);
 
-    var url = string.Format(BaseUrl, countryCode.ToUpperInvariant(), vatNumber);
+    var url = string.Format(_baseUrl, countryCode.ToUpperInvariant(), vatNumber);
     var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
     try

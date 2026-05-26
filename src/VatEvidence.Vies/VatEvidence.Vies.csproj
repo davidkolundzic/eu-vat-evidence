@@ -7,7 +7,7 @@
     <LangVersion>latest</LangVersion>
 
     <PackageId>VatEvidence.Vies</PackageId>
-    <Version>0.1.0</Version>
+    <Version>1.0.0</Version>
     <Authors>David Kolundzic</Authors>
     <Description>EU VIES VAT active-status verification client. Zero external dependencies.</Description>
     <PackageTags>vat;vies;eu;validation;tax</PackageTags>
@@ -16,6 +16,7 @@
     <RepositoryUrl>https://github.com/david-kolundzic/eu-vat-evidence</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <ItemGroup>
