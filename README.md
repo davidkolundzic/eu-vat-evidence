@@ -105,7 +105,7 @@ All 27 EU member states, validated against official EU VAT format specifications
 | BG | Bulgaria | — |
 | CY | Cyprus | — |
 | CZ | Czech Republic | — |
-| DE | Germany | MOD-11-10 |
+| DE | Germany | ISO 7064 MOD-11-10 |
 | DK | Denmark | MOD-11 |
 | EE | Estonia | — |
 | EL | Greece | MOD-11 |
