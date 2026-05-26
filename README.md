@@ -1,6 +1,9 @@
+# eu-vat-evidence
+
 [![CI](https://github.com/davidkolundzic/eu-vat-evidence/actions/workflows/ci.yml/badge.svg)](https://github.com/davidkolundzic/eu-vat-evidence/actions/workflows/ci.yml)
 
-# eu-vat-evidence
+[![NuGet VatEvidence.Core](https://img.shields.io/nuget/v/VatEvidence.Core?label=VatEvidence.Core)](https://www.nuget.org/packages/VatEvidence.Core/)
+[![NuGet VatEvidence.Vies](https://img.shields.io/nuget/v/VatEvidence.Vies?label=VatEvidence.Vies)](https://www.nuget.org/packages/VatEvidence.Vies/)
 
 **Open-source .NET library for EU VAT number validation and compliance evidence.**
 
