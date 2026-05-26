@@ -93,35 +93,35 @@ eu-vat-evidence/
 
 All 27 EU member states, validated against official EU VAT format specifications:
 
-| Prefix | Country | Checksum |
-|--------|---------|----------|
-| AT | Austria | — |
-| BE | Belgium | MOD-97 |
-| BG | Bulgaria | — |
-| CY | Cyprus | — |
-| CZ | Czech Republic | — |
-| DE | Germany | MOD-11-10 |
-| DK | Denmark | MOD-11 |
-| EE | Estonia | — |
-| EL | Greece | MOD-11 |
-| ES | Spain | — |
-| FI | Finland | MOD-11 |
-| FR | France | — |
-| HR | Croatia | ISO 7064 MOD-11-10 |
-| HU | Hungary | — |
-| IE | Ireland | — |
-| IT | Italy | Luhn |
-| LT | Lithuania | — |
-| LU | Luxembourg | MOD-89 |
-| LV | Latvia | — |
-| MT | Malta | — |
-| NL | Netherlands | — |
-| PL | Poland | Weighted |
-| PT | Portugal | — |
-| RO | Romania | — |
-| SE | Sweden | — |
-| SI | Slovenia | MOD-11 |
-| SK | Slovakia | MOD-11 |
+| Prefix | Country        | Format check | Checksum  | Tested |
+|--------|----------------|:------------:|:---------:|:------:|
+| AT     | Austria        | ✅           | —         | ✅     |
+| BE     | Belgium        | ✅           | MOD-97    | ⬜     |
+| BG     | Bulgaria       | ✅           | —         | ⬜     |
+| CY     | Cyprus         | ✅           | —         | ⬜     |
+| CZ     | Czech Republic | ✅           | —         | ⬜     |
+| DE     | Germany        | ✅           | MOD-11    | ✅     |
+| DK     | Denmark        | ✅           | MOD-11    | ⬜     |
+| EE     | Estonia        | ✅           | —         | ⬜     |
+| EL     | Greece         | ✅           | MOD-11    | ⬜     |
+| ES     | Spain          | ✅           | —         | ⬜     |
+| FI     | Finland        | ✅           | MOD-11    | ⬜     |
+| FR     | France         | ✅           | —         | ⬜     |
+| HR     | Croatia        | ✅           | MOD-11-10 | ✅     |
+| HU     | Hungary        | ✅           | —         | ⬜     |
+| IE     | Ireland        | ✅           | —         | ⬜     |
+| IT     | Italy          | ✅           | Luhn      | ✅     |
+| LT     | Lithuania      | ✅           | —         | ⬜     |
+| LU     | Luxembourg     | ✅           | MOD-89    | ⬜     |
+| LV     | Latvia         | ✅           | —         | ⬜     |
+| MT     | Malta          | ✅           | —         | ⬜     |
+| NL     | Netherlands    | ✅           | —         | ⬜     |
+| PL     | Poland         | ✅           | Weighted  | ⬜     |
+| PT     | Portugal       | ✅           | —         | ⬜     |
+| RO     | Romania        | ✅           | —         | ⬜     |
+| SE     | Sweden         | ✅           | —         | ⬜     |
+| SI     | Slovenia       | ✅           | MOD-11    | ✅     |
+| SK     | Slovakia       | ✅           | MOD-11    | ⬜     |
 
 ---
 
@@ -164,4 +164,4 @@ Beyond validation, the project maintains an append-only SHA-256 hash-chain of VA
 
 MIT — see [LICENSE](LICENSE).
 
-
+- [ ] 
