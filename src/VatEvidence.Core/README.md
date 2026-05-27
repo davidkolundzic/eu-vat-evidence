@@ -163,5 +163,3 @@ Beyond validation, the project maintains an append-only SHA-256 hash-chain of VA
 ## License
 
 MIT — see [LICENSE](LICENSE).
-
-- [ ] 
