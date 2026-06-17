@@ -6,6 +6,11 @@ Built for developers who need reliable, auditable VAT handling in European B2B a
 
 ---
 
+<!-- NuGet badges -->
+[![NuGet Core](https://img.shields.io/nuget/v/VatEvidence.Core.svg)](https://www.nuget.org/packages/VatEvidence.Core)
+[![NuGet Vies](https://img.shields.io/nuget/v/VatEvidence.Vies.svg)](https://www.nuget.org/packages/VatEvidence.Vies)
+
+
 ## Why this exists
 
 EU VAT compliance is a solved problem in theory and a surprisingly fragmented one in practice. Most libraries either:

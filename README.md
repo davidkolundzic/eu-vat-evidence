@@ -5,6 +5,10 @@
 [![NuGet VatEvidence.Core](https://img.shields.io/nuget/v/VatEvidence.Core?label=VatEvidence.Core)](https://www.nuget.org/packages/VatEvidence.Core/)
 [![NuGet VatEvidence.Vies](https://img.shields.io/nuget/v/VatEvidence.Vies?label=VatEvidence.Vies)](https://www.nuget.org/packages/VatEvidence.Vies/)
 
+<!-- Additional NuGet badge style -->
+[![NuGet VatEvidence.Core](https://img.shields.io/nuget/v/VatEvidence.Core.svg)](https://www.nuget.org/packages/VatEvidence.Core)
+[![NuGet VatEvidence.Vies](https://img.shields.io/nuget/v/VatEvidence.Vies.svg)](https://www.nuget.org/packages/VatEvidence.Vies)
+
 **Open-source .NET library for EU VAT number validation and compliance evidence.**
 
 Built for developers who need reliable, auditable VAT handling in European B2B applications — without pulling in heavy dependencies or cloud services for basic format checks.
